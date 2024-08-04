@@ -10,27 +10,97 @@ import (
 	"net/http"
 
 	"github.com/go-chi/chi/v5"
+	"github.com/oapi-codegen/runtime"
 	strictnethttp "github.com/oapi-codegen/runtime/strictmiddleware/nethttp"
 )
 
-// Pong defines model for Pong.
-type Pong struct {
-	Ping string `json:"ping"`
+// ErrBase defines model for ErrBase.
+type ErrBase struct {
+	Message string `json:"message"`
 }
+
+// ErrNotFound defines model for ErrNotFound.
+type ErrNotFound struct {
+	Message  string      `json:"message"`
+	Revision *RevisionId `json:"revision,omitempty"`
+	Type     *string     `json:"type,omitempty"`
+	Value    *string     `json:"value,omitempty"`
+}
+
+// ErrServerError defines model for ErrServerError.
+type ErrServerError = ErrBase
+
+// Meta defines model for Meta.
+type Meta struct {
+	Id       TypeId     `json:"id"`
+	Revision RevisionId `json:"revision"`
+	Type     TypeName   `json:"type"`
+	Version  int64      `json:"version"`
+}
+
+// Revision defines model for Revision.
+type Revision struct {
+	Meta  Meta  `json:"meta"`
+	Value Value `json:"value"`
+}
+
+// RevisionId defines model for RevisionId.
+type RevisionId = uint64
+
+// RevisionSummary defines model for RevisionSummary.
+type RevisionSummary struct {
+	Meta Meta `json:"meta"`
+}
+
+// TypeId defines model for TypeId.
+type TypeId = string
+
+// TypeName defines model for TypeName.
+type TypeName = string
+
+// Value defines model for Value.
+type Value = interface{}
+
+// PutDataTypeIdJSONRequestBody defines body for PutDataTypeId for application/json ContentType.
+type PutDataTypeIdJSONRequestBody = Value
 
 // ServerInterface represents all server handlers.
 type ServerInterface interface {
 
-	// (GET /ping)
-	GetPing(w http.ResponseWriter, r *http.Request)
+	// (GET /data/{type}/{id})
+	GetDataTypeId(w http.ResponseWriter, r *http.Request, pType TypeName, id TypeId)
+
+	// (PUT /data/{type}/{id})
+	PutDataTypeId(w http.ResponseWriter, r *http.Request, pType TypeName, id TypeId)
+
+	// (GET /data/{type}/{typId}/revisions)
+	ListRevisions(w http.ResponseWriter, r *http.Request, pType TypeName, typId TypeId)
+
+	// (GET /data/{type}/{typId}/revisions/{revId})
+	GetRevisionById(w http.ResponseWriter, r *http.Request, pType TypeName, typId TypeId, revId RevisionId)
 }
 
 // Unimplemented server implementation that returns http.StatusNotImplemented for each endpoint.
 
 type Unimplemented struct{}
 
-// (GET /ping)
-func (_ Unimplemented) GetPing(w http.ResponseWriter, r *http.Request) {
+// (GET /data/{type}/{id})
+func (_ Unimplemented) GetDataTypeId(w http.ResponseWriter, r *http.Request, pType TypeName, id TypeId) {
+	w.WriteHeader(http.StatusNotImplemented)
+}
+
+// (PUT /data/{type}/{id})
+func (_ Unimplemented) PutDataTypeId(w http.ResponseWriter, r *http.Request, pType TypeName, id TypeId) {
+	w.WriteHeader(http.StatusNotImplemented)
+}
+
+// (GET /data/{type}/{typId}/revisions)
+func (_ Unimplemented) ListRevisions(w http.ResponseWriter, r *http.Request, pType TypeName, typId TypeId) {
+	w.WriteHeader(http.StatusNotImplemented)
+}
+
+// (GET /data/{type}/{typId}/revisions/{revId})
+func (_ Unimplemented) GetRevisionById(w http.ResponseWriter, r *http.Request, pType TypeName, typId TypeId, revId RevisionId) {
 	w.WriteHeader(http.StatusNotImplemented)
 }
 
@@ -43,12 +113,146 @@ type ServerInterfaceWrapper struct {
 
 type MiddlewareFunc func(http.Handler) http.Handler
 
-// GetPing operation middleware
-func (siw *ServerInterfaceWrapper) GetPing(w http.ResponseWriter, r *http.Request) {
+// GetDataTypeId operation middleware
+func (siw *ServerInterfaceWrapper) GetDataTypeId(w http.ResponseWriter, r *http.Request) {
 	ctx := r.Context()
 
+	var err error
+
+	// ------------- Path parameter "type" -------------
+	var pType TypeName
+
+	err = runtime.BindStyledParameterWithOptions("simple", "type", chi.URLParam(r, "type"), &pType, runtime.BindStyledParameterOptions{ParamLocation: runtime.ParamLocationPath, Explode: false, Required: true})
+	if err != nil {
+		siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "type", Err: err})
+		return
+	}
+
+	// ------------- Path parameter "id" -------------
+	var id TypeId
+
+	err = runtime.BindStyledParameterWithOptions("simple", "id", chi.URLParam(r, "id"), &id, runtime.BindStyledParameterOptions{ParamLocation: runtime.ParamLocationPath, Explode: false, Required: true})
+	if err != nil {
+		siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "id", Err: err})
+		return
+	}
+
 	handler := http.Handler(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		siw.Handler.GetPing(w, r)
+		siw.Handler.GetDataTypeId(w, r, pType, id)
+	}))
+
+	for _, middleware := range siw.HandlerMiddlewares {
+		handler = middleware(handler)
+	}
+
+	handler.ServeHTTP(w, r.WithContext(ctx))
+}
+
+// PutDataTypeId operation middleware
+func (siw *ServerInterfaceWrapper) PutDataTypeId(w http.ResponseWriter, r *http.Request) {
+	ctx := r.Context()
+
+	var err error
+
+	// ------------- Path parameter "type" -------------
+	var pType TypeName
+
+	err = runtime.BindStyledParameterWithOptions("simple", "type", chi.URLParam(r, "type"), &pType, runtime.BindStyledParameterOptions{ParamLocation: runtime.ParamLocationPath, Explode: false, Required: true})
+	if err != nil {
+		siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "type", Err: err})
+		return
+	}
+
+	// ------------- Path parameter "id" -------------
+	var id TypeId
+
+	err = runtime.BindStyledParameterWithOptions("simple", "id", chi.URLParam(r, "id"), &id, runtime.BindStyledParameterOptions{ParamLocation: runtime.ParamLocationPath, Explode: false, Required: true})
+	if err != nil {
+		siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "id", Err: err})
+		return
+	}
+
+	handler := http.Handler(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		siw.Handler.PutDataTypeId(w, r, pType, id)
+	}))
+
+	for _, middleware := range siw.HandlerMiddlewares {
+		handler = middleware(handler)
+	}
+
+	handler.ServeHTTP(w, r.WithContext(ctx))
+}
+
+// ListRevisions operation middleware
+func (siw *ServerInterfaceWrapper) ListRevisions(w http.ResponseWriter, r *http.Request) {
+	ctx := r.Context()
+
+	var err error
+
+	// ------------- Path parameter "type" -------------
+	var pType TypeName
+
+	err = runtime.BindStyledParameterWithOptions("simple", "type", chi.URLParam(r, "type"), &pType, runtime.BindStyledParameterOptions{ParamLocation: runtime.ParamLocationPath, Explode: false, Required: true})
+	if err != nil {
+		siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "type", Err: err})
+		return
+	}
+
+	// ------------- Path parameter "typId" -------------
+	var typId TypeId
+
+	err = runtime.BindStyledParameterWithOptions("simple", "typId", chi.URLParam(r, "typId"), &typId, runtime.BindStyledParameterOptions{ParamLocation: runtime.ParamLocationPath, Explode: false, Required: true})
+	if err != nil {
+		siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "typId", Err: err})
+		return
+	}
+
+	handler := http.Handler(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		siw.Handler.ListRevisions(w, r, pType, typId)
+	}))
+
+	for _, middleware := range siw.HandlerMiddlewares {
+		handler = middleware(handler)
+	}
+
+	handler.ServeHTTP(w, r.WithContext(ctx))
+}
+
+// GetRevisionById operation middleware
+func (siw *ServerInterfaceWrapper) GetRevisionById(w http.ResponseWriter, r *http.Request) {
+	ctx := r.Context()
+
+	var err error
+
+	// ------------- Path parameter "type" -------------
+	var pType TypeName
+
+	err = runtime.BindStyledParameterWithOptions("simple", "type", chi.URLParam(r, "type"), &pType, runtime.BindStyledParameterOptions{ParamLocation: runtime.ParamLocationPath, Explode: false, Required: true})
+	if err != nil {
+		siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "type", Err: err})
+		return
+	}
+
+	// ------------- Path parameter "typId" -------------
+	var typId TypeId
+
+	err = runtime.BindStyledParameterWithOptions("simple", "typId", chi.URLParam(r, "typId"), &typId, runtime.BindStyledParameterOptions{ParamLocation: runtime.ParamLocationPath, Explode: false, Required: true})
+	if err != nil {
+		siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "typId", Err: err})
+		return
+	}
+
+	// ------------- Path parameter "revId" -------------
+	var revId RevisionId
+
+	err = runtime.BindStyledParameterWithOptions("simple", "revId", chi.URLParam(r, "revId"), &revId, runtime.BindStyledParameterOptions{ParamLocation: runtime.ParamLocationPath, Explode: false, Required: true})
+	if err != nil {
+		siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "revId", Err: err})
+		return
+	}
+
+	handler := http.Handler(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		siw.Handler.GetRevisionById(w, r, pType, typId, revId)
 	}))
 
 	for _, middleware := range siw.HandlerMiddlewares {
@@ -172,24 +376,163 @@ func HandlerWithOptions(si ServerInterface, options ChiServerOptions) http.Handl
 	}
 
 	r.Group(func(r chi.Router) {
-		r.Get(options.BaseURL+"/ping", wrapper.GetPing)
+		r.Get(options.BaseURL+"/data/{type}/{id}", wrapper.GetDataTypeId)
+	})
+	r.Group(func(r chi.Router) {
+		r.Put(options.BaseURL+"/data/{type}/{id}", wrapper.PutDataTypeId)
+	})
+	r.Group(func(r chi.Router) {
+		r.Get(options.BaseURL+"/data/{type}/{typId}/revisions", wrapper.ListRevisions)
+	})
+	r.Group(func(r chi.Router) {
+		r.Get(options.BaseURL+"/data/{type}/{typId}/revisions/{revId}", wrapper.GetRevisionById)
 	})
 
 	return r
 }
 
-type GetPingRequestObject struct {
+type GetDataTypeIdRequestObject struct {
+	Type TypeName `json:"type"`
+	Id   TypeId   `json:"id"`
 }
 
-type GetPingResponseObject interface {
-	VisitGetPingResponse(w http.ResponseWriter) error
+type GetDataTypeIdResponseObject interface {
+	VisitGetDataTypeIdResponse(w http.ResponseWriter) error
 }
 
-type GetPing200JSONResponse Pong
+type GetDataTypeId200JSONResponse Revision
 
-func (response GetPing200JSONResponse) VisitGetPingResponse(w http.ResponseWriter) error {
+func (response GetDataTypeId200JSONResponse) VisitGetDataTypeIdResponse(w http.ResponseWriter) error {
 	w.Header().Set("Content-Type", "application/json")
 	w.WriteHeader(200)
+
+	return json.NewEncoder(w).Encode(response)
+}
+
+type GetDataTypeId404JSONResponse ErrNotFound
+
+func (response GetDataTypeId404JSONResponse) VisitGetDataTypeIdResponse(w http.ResponseWriter) error {
+	w.Header().Set("Content-Type", "application/json")
+	w.WriteHeader(404)
+
+	return json.NewEncoder(w).Encode(response)
+}
+
+type GetDataTypeId500JSONResponse ErrServerError
+
+func (response GetDataTypeId500JSONResponse) VisitGetDataTypeIdResponse(w http.ResponseWriter) error {
+	w.Header().Set("Content-Type", "application/json")
+	w.WriteHeader(500)
+
+	return json.NewEncoder(w).Encode(response)
+}
+
+type PutDataTypeIdRequestObject struct {
+	Type TypeName `json:"type"`
+	Id   TypeId   `json:"id"`
+	Body *PutDataTypeIdJSONRequestBody
+}
+
+type PutDataTypeIdResponseObject interface {
+	VisitPutDataTypeIdResponse(w http.ResponseWriter) error
+}
+
+type PutDataTypeId200JSONResponse Revision
+
+func (response PutDataTypeId200JSONResponse) VisitPutDataTypeIdResponse(w http.ResponseWriter) error {
+	w.Header().Set("Content-Type", "application/json")
+	w.WriteHeader(200)
+
+	return json.NewEncoder(w).Encode(response)
+}
+
+type PutDataTypeId404JSONResponse ErrNotFound
+
+func (response PutDataTypeId404JSONResponse) VisitPutDataTypeIdResponse(w http.ResponseWriter) error {
+	w.Header().Set("Content-Type", "application/json")
+	w.WriteHeader(404)
+
+	return json.NewEncoder(w).Encode(response)
+}
+
+type PutDataTypeId500JSONResponse ErrServerError
+
+func (response PutDataTypeId500JSONResponse) VisitPutDataTypeIdResponse(w http.ResponseWriter) error {
+	w.Header().Set("Content-Type", "application/json")
+	w.WriteHeader(500)
+
+	return json.NewEncoder(w).Encode(response)
+}
+
+type ListRevisionsRequestObject struct {
+	Type  TypeName `json:"type"`
+	TypId TypeId   `json:"typId"`
+}
+
+type ListRevisionsResponseObject interface {
+	VisitListRevisionsResponse(w http.ResponseWriter) error
+}
+
+type ListRevisions200JSONResponse []RevisionSummary
+
+func (response ListRevisions200JSONResponse) VisitListRevisionsResponse(w http.ResponseWriter) error {
+	w.Header().Set("Content-Type", "application/json")
+	w.WriteHeader(200)
+
+	return json.NewEncoder(w).Encode(response)
+}
+
+type ListRevisions404JSONResponse ErrNotFound
+
+func (response ListRevisions404JSONResponse) VisitListRevisionsResponse(w http.ResponseWriter) error {
+	w.Header().Set("Content-Type", "application/json")
+	w.WriteHeader(404)
+
+	return json.NewEncoder(w).Encode(response)
+}
+
+type ListRevisions500JSONResponse ErrServerError
+
+func (response ListRevisions500JSONResponse) VisitListRevisionsResponse(w http.ResponseWriter) error {
+	w.Header().Set("Content-Type", "application/json")
+	w.WriteHeader(500)
+
+	return json.NewEncoder(w).Encode(response)
+}
+
+type GetRevisionByIdRequestObject struct {
+	Type  TypeName   `json:"type"`
+	TypId TypeId     `json:"typId"`
+	RevId RevisionId `json:"revId"`
+}
+
+type GetRevisionByIdResponseObject interface {
+	VisitGetRevisionByIdResponse(w http.ResponseWriter) error
+}
+
+type GetRevisionById200JSONResponse Revision
+
+func (response GetRevisionById200JSONResponse) VisitGetRevisionByIdResponse(w http.ResponseWriter) error {
+	w.Header().Set("Content-Type", "application/json")
+	w.WriteHeader(200)
+
+	return json.NewEncoder(w).Encode(response)
+}
+
+type GetRevisionById404JSONResponse ErrNotFound
+
+func (response GetRevisionById404JSONResponse) VisitGetRevisionByIdResponse(w http.ResponseWriter) error {
+	w.Header().Set("Content-Type", "application/json")
+	w.WriteHeader(404)
+
+	return json.NewEncoder(w).Encode(response)
+}
+
+type GetRevisionById500JSONResponse ErrServerError
+
+func (response GetRevisionById500JSONResponse) VisitGetRevisionByIdResponse(w http.ResponseWriter) error {
+	w.Header().Set("Content-Type", "application/json")
+	w.WriteHeader(500)
 
 	return json.NewEncoder(w).Encode(response)
 }
@@ -197,8 +540,17 @@ func (response GetPing200JSONResponse) VisitGetPingResponse(w http.ResponseWrite
 // StrictServerInterface represents all server handlers.
 type StrictServerInterface interface {
 
-	// (GET /ping)
-	GetPing(ctx context.Context, request GetPingRequestObject) (GetPingResponseObject, error)
+	// (GET /data/{type}/{id})
+	GetDataTypeId(ctx context.Context, request GetDataTypeIdRequestObject) (GetDataTypeIdResponseObject, error)
+
+	// (PUT /data/{type}/{id})
+	PutDataTypeId(ctx context.Context, request PutDataTypeIdRequestObject) (PutDataTypeIdResponseObject, error)
+
+	// (GET /data/{type}/{typId}/revisions)
+	ListRevisions(ctx context.Context, request ListRevisionsRequestObject) (ListRevisionsResponseObject, error)
+
+	// (GET /data/{type}/{typId}/revisions/{revId})
+	GetRevisionById(ctx context.Context, request GetRevisionByIdRequestObject) (GetRevisionByIdResponseObject, error)
 }
 
 type StrictHandlerFunc = strictnethttp.StrictHTTPHandlerFunc
@@ -230,23 +582,115 @@ type strictHandler struct {
 	options     StrictHTTPServerOptions
 }
 
-// GetPing operation middleware
-func (sh *strictHandler) GetPing(w http.ResponseWriter, r *http.Request) {
-	var request GetPingRequestObject
+// GetDataTypeId operation middleware
+func (sh *strictHandler) GetDataTypeId(w http.ResponseWriter, r *http.Request, pType TypeName, id TypeId) {
+	var request GetDataTypeIdRequestObject
+
+	request.Type = pType
+	request.Id = id
 
 	handler := func(ctx context.Context, w http.ResponseWriter, r *http.Request, request interface{}) (interface{}, error) {
-		return sh.ssi.GetPing(ctx, request.(GetPingRequestObject))
+		return sh.ssi.GetDataTypeId(ctx, request.(GetDataTypeIdRequestObject))
 	}
 	for _, middleware := range sh.middlewares {
-		handler = middleware(handler, "GetPing")
+		handler = middleware(handler, "GetDataTypeId")
 	}
 
 	response, err := handler(r.Context(), w, r, request)
 
 	if err != nil {
 		sh.options.ResponseErrorHandlerFunc(w, r, err)
-	} else if validResponse, ok := response.(GetPingResponseObject); ok {
-		if err := validResponse.VisitGetPingResponse(w); err != nil {
+	} else if validResponse, ok := response.(GetDataTypeIdResponseObject); ok {
+		if err := validResponse.VisitGetDataTypeIdResponse(w); err != nil {
+			sh.options.ResponseErrorHandlerFunc(w, r, err)
+		}
+	} else if response != nil {
+		sh.options.ResponseErrorHandlerFunc(w, r, fmt.Errorf("unexpected response type: %T", response))
+	}
+}
+
+// PutDataTypeId operation middleware
+func (sh *strictHandler) PutDataTypeId(w http.ResponseWriter, r *http.Request, pType TypeName, id TypeId) {
+	var request PutDataTypeIdRequestObject
+
+	request.Type = pType
+	request.Id = id
+
+	var body PutDataTypeIdJSONRequestBody
+	if err := json.NewDecoder(r.Body).Decode(&body); err != nil {
+		sh.options.RequestErrorHandlerFunc(w, r, fmt.Errorf("can't decode JSON body: %w", err))
+		return
+	}
+	request.Body = &body
+
+	handler := func(ctx context.Context, w http.ResponseWriter, r *http.Request, request interface{}) (interface{}, error) {
+		return sh.ssi.PutDataTypeId(ctx, request.(PutDataTypeIdRequestObject))
+	}
+	for _, middleware := range sh.middlewares {
+		handler = middleware(handler, "PutDataTypeId")
+	}
+
+	response, err := handler(r.Context(), w, r, request)
+
+	if err != nil {
+		sh.options.ResponseErrorHandlerFunc(w, r, err)
+	} else if validResponse, ok := response.(PutDataTypeIdResponseObject); ok {
+		if err := validResponse.VisitPutDataTypeIdResponse(w); err != nil {
+			sh.options.ResponseErrorHandlerFunc(w, r, err)
+		}
+	} else if response != nil {
+		sh.options.ResponseErrorHandlerFunc(w, r, fmt.Errorf("unexpected response type: %T", response))
+	}
+}
+
+// ListRevisions operation middleware
+func (sh *strictHandler) ListRevisions(w http.ResponseWriter, r *http.Request, pType TypeName, typId TypeId) {
+	var request ListRevisionsRequestObject
+
+	request.Type = pType
+	request.TypId = typId
+
+	handler := func(ctx context.Context, w http.ResponseWriter, r *http.Request, request interface{}) (interface{}, error) {
+		return sh.ssi.ListRevisions(ctx, request.(ListRevisionsRequestObject))
+	}
+	for _, middleware := range sh.middlewares {
+		handler = middleware(handler, "ListRevisions")
+	}
+
+	response, err := handler(r.Context(), w, r, request)
+
+	if err != nil {
+		sh.options.ResponseErrorHandlerFunc(w, r, err)
+	} else if validResponse, ok := response.(ListRevisionsResponseObject); ok {
+		if err := validResponse.VisitListRevisionsResponse(w); err != nil {
+			sh.options.ResponseErrorHandlerFunc(w, r, err)
+		}
+	} else if response != nil {
+		sh.options.ResponseErrorHandlerFunc(w, r, fmt.Errorf("unexpected response type: %T", response))
+	}
+}
+
+// GetRevisionById operation middleware
+func (sh *strictHandler) GetRevisionById(w http.ResponseWriter, r *http.Request, pType TypeName, typId TypeId, revId RevisionId) {
+	var request GetRevisionByIdRequestObject
+
+	request.Type = pType
+	request.TypId = typId
+	request.RevId = revId
+
+	handler := func(ctx context.Context, w http.ResponseWriter, r *http.Request, request interface{}) (interface{}, error) {
+		return sh.ssi.GetRevisionById(ctx, request.(GetRevisionByIdRequestObject))
+	}
+	for _, middleware := range sh.middlewares {
+		handler = middleware(handler, "GetRevisionById")
+	}
+
+	response, err := handler(r.Context(), w, r, request)
+
+	if err != nil {
+		sh.options.ResponseErrorHandlerFunc(w, r, err)
+	} else if validResponse, ok := response.(GetRevisionByIdResponseObject); ok {
+		if err := validResponse.VisitGetRevisionByIdResponse(w); err != nil {
 			sh.options.ResponseErrorHandlerFunc(w, r, err)
 		}
 	} else if response != nil {

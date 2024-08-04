@@ -3,14 +3,22 @@ package main
 import (
 	"context"
 	"fmt"
-	"github.com/go-chi/chi/v5"
-	"github.com/urfave/cli/v3"
 	"log"
 	"log/slog"
 	"net/http"
 	"os"
 	"vdb/api"
+	"vdb/pkg/common"
+	"vdb/pkg/datastore"
+	driver "vdb/pkg/driver/base"
 	"vdb/pkg/health"
+
+	"github.com/go-chi/chi/v5"
+	"github.com/urfave/cli/v3"
+
+	"vdb/pkg/driver/memory"
+	"vdb/pkg/registry/validator"
+	"vdb/pkg/validator/tester"
 )
 
 func main() {
@@ -44,7 +52,38 @@ func main() {
 func serve(ctx context.Context, cmd *cli.Command) error {
 	r := chi.NewRouter()
 
-	handler, err := api.NewHandler()
+	validatorDriver, err := memory.NewMemoryStore()
+	if err != nil {
+		return err
+	}
+
+	registry, err := validator.NewValidatorRegistry(validatorDriver)
+	if err != nil {
+		return err
+	}
+
+	testerValidator, err := tester.NewTesterValidator()
+	if err != nil {
+		return err
+	}
+
+	if err := registry.Register(ctx, "tester", testerValidator); err != nil {
+		return err
+	}
+
+	ds, err := datastore.NewDataStore(datastore.WithDefaultDriverFunc(func(name common.TypeName) (driver.Driver, error) {
+		return memory.NewMemoryStore()
+	}))
+
+	if err != nil {
+		return err
+	}
+
+	if err := ds.RegisterType("test", testerValidator); err != nil {
+		return err
+	}
+
+	handler, err := api.NewHandler(ds)
 	if err != nil {
 		return err
 	}
@@ -55,6 +94,11 @@ func serve(ctx context.Context, cmd *cli.Command) error {
 		return err
 	}
 	r.Mount("/health", h)
+
+	chi.Walk(r, func(method string, route string, handler http.Handler, middlewares ...func(http.Handler) http.Handler) error {
+		fmt.Printf("[%s]: '%s' has %d middlewares\n", method, route, len(middlewares))
+		return nil
+	})
 
 	listenAddr := fmt.Sprintf(
 		"%s:%d",

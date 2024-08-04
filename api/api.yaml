@@ -1,25 +1,236 @@
 openapi: "3.0.0"
 info:
   version: 1.0.0
-  title: Minimal ping API server
+  title: VDB
 paths:
-  /ping:
+  /data/{type}/{id}:
     get:
+      parameters:
+        - name: type
+          in: path
+          description: Type of data
+          required: true
+          schema:
+            $ref: '#/components/schemas/TypeName'
+        - name: id
+          in: path
+          description: ID of data to fetch
+          required: true
+          schema:
+            $ref: '#/components/schemas/TypeId'
       responses:
         '200':
-          description: pet response
+          description: data response
           content:
             application/json:
               schema:
-                $ref: '#/components/schemas/Pong'
+                $ref: '#/components/schemas/Revision'
+        '404':
+          description: not found
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrNotFound'
+        '500':
+          description: internal server error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrServerError'
+    put:
+      parameters:
+        - name: type
+          in: path
+          description: Type of data
+          required: true
+          schema:
+            $ref: '#/components/schemas/TypeName'
+        - name: id
+          in: path
+          description: ID of data to create
+          required: true
+          schema:
+            $ref: '#/components/schemas/TypeId'
+      requestBody:
+        description: Pet to add to the store
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/Value'
+      responses:
+        '200':
+          description: data response
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Revision'
+        '404':
+          description: not found
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrNotFound'
+        '500':
+          description: internal server error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrServerError'
+  /data/{type}/{typId}/revisions:
+    get:
+      operationId: listRevisions
+      parameters:
+        - name: type
+          in: path
+          description: Type of data
+          required: true
+          schema:
+              $ref: '#/components/schemas/TypeName'
+        - name: typId
+          in: path
+          description: ID of data to fetch
+          required: true
+          schema:
+              $ref: '#/components/schemas/TypeId'
+      responses:
+        '200':
+          description: data response
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: '#/components/schemas/RevisionSummary'
+        '404':
+          description: not found
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrNotFound'
+        '500':
+          description: internal server error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrServerError'
+  /data/{type}/{typId}/revisions/{revId}:
+    get:
+      operationId: getRevisionById
+      parameters:
+        - name: type
+          in: path
+          description: Type of data
+          required: true
+          schema:
+            $ref: '#/components/schemas/TypeName'
+        - name: typId
+          in: path
+          description: Type of data
+          required: true
+          schema:
+            $ref: '#/components/schemas/TypeId'
+        - name: revId
+          in: path
+          description: ID of data to fetch
+          required: true
+          schema:
+            $ref: '#/components/schemas/RevisionId'
+      responses:
+        '200':
+          description: data response
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Revision'
+        '404':
+          description: not found
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrNotFound'
+        '500':
+          description: internal server error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrServerError'
 components:
   schemas:
-    # base types
-    Pong:
+    Meta:
       type: object
+      additionalProperties: false
       required:
-        - ping
+        - type
+        - id
+        - version
+        - revision
       properties:
-        ping:
+        revision:
+          $ref: '#/components/schemas/RevisionId'
+        id:
+          $ref: '#/components/schemas/TypeId'
+        type:
+          $ref: '#/components/schemas/TypeName'
+        version:
+          type: integer
+          format: int64
+          example: 1
+          minimum: 0
+          exclusiveMinimum: false
+    Value: {}
+    RevisionId:
+      type: integer
+      format: uint64
+      example: 1
+      minimum: 0
+      exclusiveMinimum: false
+    TypeName:
+      type: string
+      example: data
+    TypeId:
+      type: string
+      example: data
+    RevisionSummary:
+      type: object
+      additionalProperties: false
+      required:
+        - meta
+      properties:
+        meta:
+          $ref: '#/components/schemas/Meta'
+    Revision:
+      type: object
+      additionalProperties: false
+      required:
+        - meta
+        - value
+      properties:
+        meta:
+          $ref: '#/components/schemas/Meta'
+        value:
+          $ref: '#/components/schemas/Value'
+    ErrBase:
+      type: object
+      additionalProperties: false
+      required:
+        - message
+      properties:
+        message:
           type: string
-          example: pong
+    ErrNotFound:
+      allOf:
+        - $ref: '#/components/schemas/ErrBase'
+        - type: object
+          properties:
+            type:
+              type: string
+              example: "data"
+            value:
+              type: string
+              example: "data"
+            revision:
+              $ref: '#/components/schemas/RevisionId'
+    ErrServerError:
+      allOf:
+        - $ref: '#/components/schemas/ErrBase'
