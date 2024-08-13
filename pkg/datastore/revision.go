@@ -7,15 +7,15 @@ import (
 
 type Meta struct {
 	driver.Meta
-	Type common.TypeName
+	Type common.CollectionName
 }
 
 type Revision struct {
 	Meta  Meta
-	Value common.Value
+	Value common.CollectionValue
 }
 
-func convertRevision(typ common.TypeName, revision *driver.Revision) (Revision, error) {
+func convertRevision(typ common.CollectionName, revision *driver.Revision) (Revision, error) {
 	return Revision{
 		Meta: Meta{
 			Meta: revision.Meta,

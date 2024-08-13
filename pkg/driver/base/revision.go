@@ -5,12 +5,12 @@ import "vdb/pkg/common"
 const DefaultVersion common.VersionID = 1
 
 type Meta struct {
-	Id       common.TypeID
+	Id       common.CollectionId
 	Revision common.RevisionID
 	Version  common.VersionID
 }
 
 type Revision struct {
 	Meta  Meta
-	Value common.Value
+	Value common.CollectionValue
 }

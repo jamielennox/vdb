@@ -7,7 +7,7 @@ import (
 )
 
 type ErrUnknownType struct {
-	Type common.TypeName
+	Type common.CollectionName
 }
 
 func (e ErrUnknownType) Error() string {
@@ -15,8 +15,8 @@ func (e ErrUnknownType) Error() string {
 }
 
 type ErrIdNotFound struct {
-	Type common.TypeName
-	Id   common.TypeID
+	Type common.CollectionName
+	Id   common.CollectionId
 }
 
 func (e ErrIdNotFound) Error() string {
@@ -24,8 +24,8 @@ func (e ErrIdNotFound) Error() string {
 }
 
 type ErrRevisionNotFound struct {
-	Type       common.TypeName
-	Id         common.TypeID
+	Type       common.CollectionName
+	Id         common.CollectionId
 	RevisionID common.RevisionID
 }
 

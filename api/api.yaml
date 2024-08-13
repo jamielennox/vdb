@@ -3,8 +3,80 @@ info:
   version: 1.0.0
   title: VDB
 paths:
-  /data/{type}/{id}:
+  /collections/{type}/validator:
     get:
+      operationId: getValidatorSummary
+      parameters:
+        - name: type
+          in: path
+          description: Type of data
+          required: true
+          schema:
+            $ref: '#/components/schemas/TypeName'
+      responses:
+        '200':
+          description: data response
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Validator'
+        '404':
+          description: not found
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrNotFound'
+        '500':
+          description: internal server error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrServerError'
+    post:
+      operationId: setValidator
+      parameters:
+        - name: type
+          in: path
+          description: Type of data
+          required: true
+          schema:
+            $ref: '#/components/schemas/TypeName'
+      requestBody:
+        description: Validator config
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              additionalProperties: false
+              properties:
+                validator:
+                  type: string
+                  enum:
+                    - "cuelang"
+                config: {}
+      responses:
+        '200':
+          description: data response
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Revision'
+        '404':
+          description: not found
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrNotFound'
+        '500':
+          description: internal server error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrServerError'
+  /collections/{type}/data/{id}:
+    get:
+      operationId: getDataById
       parameters:
         - name: type
           in: path
@@ -37,7 +109,8 @@ paths:
             application/json:
               schema:
                 $ref: '#/components/schemas/ErrServerError'
-    put:
+    post:
+      operationId: setData
       parameters:
         - name: type
           in: path
@@ -77,9 +150,9 @@ paths:
             application/json:
               schema:
                 $ref: '#/components/schemas/ErrServerError'
-  /data/{type}/{typId}/revisions:
+  /collections/{type}/data/{typId}/revisions:
     get:
-      operationId: listRevisions
+      operationId: listDataRevisions
       parameters:
         - name: type
           in: path
@@ -101,7 +174,7 @@ paths:
               schema:
                 type: array
                 items:
-                  $ref: '#/components/schemas/RevisionSummary'
+                  $ref: '#/components/schemas/Revision'
         '404':
           description: not found
           content:
@@ -114,9 +187,9 @@ paths:
             application/json:
               schema:
                 $ref: '#/components/schemas/ErrServerError'
-  /data/{type}/{typId}/revisions/{revId}:
+  /collections/{type}/data/{typId}/revisions/{revId}:
     get:
-      operationId: getRevisionById
+      operationId: getDataRevisionById
       parameters:
         - name: type
           in: path
@@ -191,15 +264,18 @@ components:
     TypeId:
       type: string
       example: data
-    RevisionSummary:
+    Revision:
       type: object
       additionalProperties: false
       required:
         - meta
+        - value
       properties:
         meta:
           $ref: '#/components/schemas/Meta'
-    Revision:
+        value:
+          $ref: '#/components/schemas/Value'
+    Validator:
       type: object
       additionalProperties: false
       required:

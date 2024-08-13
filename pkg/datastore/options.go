@@ -3,25 +3,25 @@ package datastore
 import driver "vdb/pkg/driver/base"
 
 type dsOptions struct {
-	defaultDriverFunc DefaultDriverFunc
+	driverFactory driver.Factory
 }
 
 type DataStoreOption func(*dsOptions)
 
-func WithDefaultDriverFunc(f DefaultDriverFunc) DataStoreOption {
+func WithDriverFactory(f driver.Factory) DataStoreOption {
 	return func(o *dsOptions) {
-		o.defaultDriverFunc = f
+		o.driverFactory = f
 	}
 }
 
-type handlerOptions struct {
-	dri driver.Driver
-}
-
-type HandlerOption func(*handlerOptions)
-
-func WithDriver(d driver.Driver) HandlerOption {
-	return func(o *handlerOptions) {
-		o.dri = d
-	}
-}
+//type handlerOptions struct {
+//	dri driver.Driver
+//}
+//
+//type HandlerOption func(*handlerOptions)
+//
+//func WithDriver(d driver.Driver) HandlerOption {
+//	return func(o *handlerOptions) {
+//		o.dri = d
+//	}
+//}

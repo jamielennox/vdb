@@ -8,18 +8,22 @@ import (
 	"net/http"
 	"os"
 	"vdb/api"
-	"vdb/pkg/common"
 	"vdb/pkg/datastore"
-	driver "vdb/pkg/driver/base"
 	"vdb/pkg/health"
+	"vdb/pkg/validator/cuelang"
 
 	"github.com/go-chi/chi/v5"
 	"github.com/urfave/cli/v3"
 
 	"vdb/pkg/driver/memory"
-	"vdb/pkg/registry/validator"
-	"vdb/pkg/validator/tester"
 )
+
+const sampleCuelang = `
+#Schema: {
+	name?: string
+	age?:  number
+}
+`
 
 func main() {
 	cmd := &cli.Command{
@@ -52,34 +56,27 @@ func main() {
 func serve(ctx context.Context, cmd *cli.Command) error {
 	r := chi.NewRouter()
 
-	validatorDriver, err := memory.NewMemoryStore()
+	cd, err := memory.NewMemoryStore()
 	if err != nil {
 		return err
 	}
 
-	registry, err := validator.NewValidatorRegistry(validatorDriver)
+	df, err := memory.NewMemoryDriverFactory()
 	if err != nil {
 		return err
 	}
 
-	testerValidator, err := tester.NewTesterValidator()
+	ds, err := datastore.NewDataStore(cd, df)
 	if err != nil {
 		return err
 	}
 
-	if err := registry.Register(ctx, "tester", testerValidator); err != nil {
+	cueFactory := cuelang.NewCuelangFactory()
+	if err := ds.Register(cuelang.DefaultCueLangValidatorName, cueFactory); err != nil {
 		return err
 	}
 
-	ds, err := datastore.NewDataStore(datastore.WithDefaultDriverFunc(func(name common.TypeName) (driver.Driver, error) {
-		return memory.NewMemoryStore()
-	}))
-
-	if err != nil {
-		return err
-	}
-
-	if err := ds.RegisterType("test", testerValidator); err != nil {
+	if _, err := ds.Set(ctx, "test", "test", cuelang.DefaultCueLangValidatorName, sampleCuelang); err != nil {
 		return err
 	}
 
@@ -87,6 +84,7 @@ func serve(ctx context.Context, cmd *cli.Command) error {
 	if err != nil {
 		return err
 	}
+
 	r.Mount("/api", handler)
 
 	h, err := health.NewHealth()

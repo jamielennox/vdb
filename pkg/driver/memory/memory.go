@@ -10,10 +10,10 @@ import (
 
 type memoryStore struct {
 	lock  sync.RWMutex
-	store map[common.TypeID][]common.Value
+	store map[common.CollectionId][]common.CollectionValue
 }
 
-func valuesToRevisions(id common.TypeID, values []common.Value) []base.Revision {
+func valuesToRevisions(id common.CollectionId, values []common.CollectionValue) []base.Revision {
 	ret := make([]base.Revision, len(values))
 
 	for i, val := range values {
@@ -30,7 +30,7 @@ func valuesToRevisions(id common.TypeID, values []common.Value) []base.Revision 
 	return ret
 }
 
-func (m *memoryStore) GetLatest(ctx context.Context, id common.TypeID) (base.Revision, error) {
+func (m *memoryStore) GetLatest(ctx context.Context, id common.CollectionId) (base.Revision, error) {
 	m.lock.RLock()
 	defer m.lock.RUnlock()
 
@@ -53,7 +53,7 @@ func (m *memoryStore) GetLatest(ctx context.Context, id common.TypeID) (base.Rev
 	}, nil
 }
 
-func (m *memoryStore) GetRevisions(ctx context.Context, id common.TypeID) ([]base.Revision, error) {
+func (m *memoryStore) GetRevisions(ctx context.Context, id common.CollectionId) ([]base.Revision, error) {
 	m.lock.RLock()
 	defer m.lock.RUnlock()
 
@@ -65,12 +65,12 @@ func (m *memoryStore) GetRevisions(ctx context.Context, id common.TypeID) ([]bas
 	return valuesToRevisions(id, v), nil
 }
 
-func (m *memoryStore) Set(ctx context.Context, id common.TypeID, value common.Value) (base.Revision, error) {
+func (m *memoryStore) Set(ctx context.Context, id common.CollectionId, value common.CollectionValue) (base.Revision, error) {
 	m.lock.Lock()
 	defer m.lock.Unlock()
 
 	if m.store == nil {
-		m.store = make(map[common.TypeID][]common.Value)
+		m.store = make(map[common.CollectionId][]common.CollectionValue)
 	}
 
 	m.store[id] = append(m.store[id], value)
@@ -92,6 +92,6 @@ func NewMemoryStore(opts ...Option) (base.Driver, error) {
 	}
 
 	return &memoryStore{
-		store: make(map[common.TypeID][]common.Value),
+		store: make(map[common.CollectionId][]common.CollectionValue),
 	}, nil
 }

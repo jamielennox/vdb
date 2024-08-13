@@ -1,11 +1,14 @@
 package common
 
-type TypeID string
-type TypeName string
+type CollectionName string
+type CollectionId string
+type CollectionValue any
 
 type RevisionID uint64
-
 type VersionID uint
-type Value any
+
+type DriverName string
+type DriverData any
 
 type ValidatorName string
+type ValidatorData any
