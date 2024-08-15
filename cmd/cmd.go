@@ -3,19 +3,23 @@ package main
 import (
 	"context"
 	"fmt"
+	"gorm.io/gorm/logger"
 	"log"
 	"log/slog"
 	"net/http"
 	"os"
-	"vdb/api"
-	"vdb/pkg/datastore"
-	"vdb/pkg/health"
-	"vdb/pkg/validator/cuelang"
+	"vdb/pkg/driver/sql"
 
 	"github.com/go-chi/chi/v5"
 	"github.com/urfave/cli/v3"
+	"gorm.io/driver/sqlite"
+	"gorm.io/gorm"
 
+	"vdb/api"
+	"vdb/pkg/datastore"
 	"vdb/pkg/driver/memory"
+	"vdb/pkg/health"
+	"vdb/pkg/validator/cuelang"
 )
 
 const sampleCuelang = `
@@ -56,17 +60,33 @@ func main() {
 func serve(ctx context.Context, cmd *cli.Command) error {
 	r := chi.NewRouter()
 
+	db, err := gorm.Open(
+		sqlite.Open("test.db"),
+		&gorm.Config{
+			//SlowThreshold: time.Second, // Slow SQL threshold
+			Logger: logger.Default.LogMode(logger.Info),
+		},
+	)
+	if err != nil {
+		panic("failed to connect database")
+	}
+
+	sd, err := sql.NewSqlDriverFactory(db)
+	if err != nil {
+		return err
+	}
+
 	cd, err := memory.NewMemoryStore()
 	if err != nil {
 		return err
 	}
 
-	df, err := memory.NewMemoryDriverFactory()
-	if err != nil {
-		return err
-	}
+	//df, err := memory.NewMemoryDriverFactory()
+	//if err != nil {
+	//	return err
+	//}
 
-	ds, err := datastore.NewDataStore(cd, df)
+	ds, err := datastore.NewDataStore(cd, sd)
 	if err != nil {
 		return err
 	}

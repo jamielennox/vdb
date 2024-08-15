@@ -5,14 +5,11 @@ package api
 import (
 	"net/http"
 	"vdb/pkg/datastore"
-
-	validator "vdb/pkg/registry/validator"
 )
 
 func NewHandler(ds *datastore.DataStore, opts ...Option) (http.Handler, error) {
 	s := &server{
 		ds: ds,
-		//vr: validatorRegistry,
 	}
 
 	o := options{}
@@ -40,7 +37,6 @@ func NewHandler(ds *datastore.DataStore, opts ...Option) (http.Handler, error) {
 
 type server struct {
 	ds *datastore.DataStore
-	vr *validator.ValidatorRegistry
 }
 
 var _ StrictServerInterface = &server{}
