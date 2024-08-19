@@ -251,6 +251,10 @@ components:
           example: 1
           minimum: 0
           exclusiveMinimum: false
+    Labels:
+      type: object
+      additionalProperties:
+        type: string
     Value: {}
     RevisionId:
       type: integer
@@ -273,6 +277,8 @@ components:
       properties:
         meta:
           $ref: '#/components/schemas/Meta'
+        labels:
+          $ref: '#/components/schemas/Labels'
         value:
           $ref: '#/components/schemas/Value'
     Validator:

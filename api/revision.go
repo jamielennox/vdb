@@ -1,9 +1,11 @@
 package api
 
-import "vdb/pkg/datastore"
+import (
+	"vdb/pkg/collection"
+)
 
-func renderRevision(revision datastore.Revision) Revision {
-	return Revision{
+func renderRevision(revision collection.Revision) Revision {
+	r := Revision{
 		Meta: Meta{
 			Id:       string(revision.Meta.Id),
 			Revision: uint64(revision.Meta.Revision),
@@ -12,4 +14,11 @@ func renderRevision(revision datastore.Revision) Revision {
 		},
 		Value: revision.Value,
 	}
+
+	if len(revision.Labels) > 0 {
+		mr := Labels(revision.Labels)
+		r.Labels = &mr
+	}
+
+	return r
 }

@@ -3,18 +3,18 @@ package main
 import (
 	"context"
 	"fmt"
-	"gorm.io/gorm/logger"
+	slogGorm "github.com/orandin/slog-gorm"
 	"log"
 	"log/slog"
 	"net/http"
 	"os"
+	"vdb/pkg/authz/opa"
 	"vdb/pkg/driver/sql"
 
 	"github.com/go-chi/chi/v5"
 	"github.com/urfave/cli/v3"
 	"gorm.io/driver/sqlite"
 	"gorm.io/gorm"
-
 	"vdb/api"
 	"vdb/pkg/datastore"
 	"vdb/pkg/driver/memory"
@@ -26,6 +26,33 @@ const sampleCuelang = `
 #Schema: {
 	name?: string
 	age?:  number
+}
+`
+
+const oldOPA = `
+package example.authz
+
+import rego.v1
+
+default allow := false
+
+allow if {
+    input.method == "GET"
+    input.path == ["salary", input.subject.user]
+}
+
+allow if is_admin
+
+is_admin if "admin" in input.subject.groups
+`
+
+const sampleOpa = `
+package authz
+
+default allow = false
+
+allow {
+    input.target.type == "collection"
 }
 `
 
@@ -59,16 +86,19 @@ func main() {
 
 func serve(ctx context.Context, cmd *cli.Command) error {
 	r := chi.NewRouter()
+	logger := slog.Default()
 
 	db, err := gorm.Open(
 		sqlite.Open("test.db"),
 		&gorm.Config{
-			//SlowThreshold: time.Second, // Slow SQL threshold
-			Logger: logger.Default.LogMode(logger.Info),
+			Logger: slogGorm.New(
+				slogGorm.WithHandler(logger.Handler()),
+			),
 		},
 	)
 	if err != nil {
-		panic("failed to connect database")
+		logger.ErrorContext(ctx, "failed to connect to database", slog.Any("err", err))
+		return err
 	}
 
 	sd, err := sql.NewSqlDriverFactory(db)
@@ -86,17 +116,35 @@ func serve(ctx context.Context, cmd *cli.Command) error {
 	//	return err
 	//}
 
-	ds, err := datastore.NewDataStore(cd, sd)
+	ds, err := datastore.NewDataStore(
+		cd,
+		sd,
+		datastore.WithLogger(logger),
+	)
 	if err != nil {
 		return err
 	}
 
 	cueFactory := cuelang.NewCuelangFactory()
-	if err := ds.Register(cuelang.DefaultCueLangValidatorName, cueFactory); err != nil {
+	if err := ds.RegisterValidator(cuelang.DefaultCueLangValidatorName, cueFactory); err != nil {
 		return err
 	}
 
-	if _, err := ds.Set(ctx, "test", "test", cuelang.DefaultCueLangValidatorName, sampleCuelang); err != nil {
+	opaFactory := opa.NewOpaFactory()
+	if err := ds.RegisterAuthorizer(opa.DefaultOpaAuthorizerName, opaFactory); err != nil {
+		return err
+	}
+
+	if _, err := ds.Set(
+		ctx,
+		"test",
+		"test",
+		cuelang.DefaultCueLangValidatorName,
+		sampleCuelang,
+		opa.DefaultOpaAuthorizerName,
+		sampleOpa,
+		datastore.WithAuthBypass(true),
+	); err != nil {
 		return err
 	}
 
@@ -113,10 +161,10 @@ func serve(ctx context.Context, cmd *cli.Command) error {
 	}
 	r.Mount("/health", h)
 
-	chi.Walk(r, func(method string, route string, handler http.Handler, middlewares ...func(http.Handler) http.Handler) error {
-		fmt.Printf("[%s]: '%s' has %d middlewares\n", method, route, len(middlewares))
-		return nil
-	})
+	//chi.Walk(r, func(method string, route string, handler http.Handler, middlewares ...func(http.Handler) http.Handler) error {
+	//	fmt.Printf("[%s]: '%s' has %d middlewares\n", method, route, len(middlewares))
+	//	return nil
+	//})
 
 	listenAddr := fmt.Sprintf(
 		"%s:%d",

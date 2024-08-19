@@ -1,15 +1,13 @@
-package base
+package collection
 
 import (
 	"vdb/pkg/common"
+	driver "vdb/pkg/driver/base"
 )
 
-const DefaultVersion common.VersionID = 1
-
 type Meta struct {
-	Id       common.CollectionId
-	Revision common.RevisionID
-	Version  common.VersionID
+	driver.Meta
+	Type common.CollectionName
 }
 
 type Revision struct {

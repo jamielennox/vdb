@@ -1,6 +1,9 @@
 package api
 
-import "vdb/pkg/datastore"
+import (
+	"vdb/pkg/collection"
+	"vdb/pkg/datastore"
+)
 
 func RenderErrUnknownType(e datastore.ErrUnknownType) ErrNotFound {
 	t := "type"
@@ -13,7 +16,7 @@ func RenderErrUnknownType(e datastore.ErrUnknownType) ErrNotFound {
 	}
 }
 
-func RenderErrIdNotFound(e datastore.ErrIdNotFound) ErrNotFound {
+func RenderErrIdNotFound(e collection.ErrIdNotFound) ErrNotFound {
 	t := string(e.Type)
 	v := string(e.Id)
 
@@ -24,7 +27,7 @@ func RenderErrIdNotFound(e datastore.ErrIdNotFound) ErrNotFound {
 	}
 }
 
-func RenderRevisionIdNotFound(e datastore.ErrRevisionNotFound) ErrNotFound {
+func RenderRevisionIdNotFound(e collection.ErrRevisionNotFound) ErrNotFound {
 	t := string(e.Type)
 	v := string(e.Id)
 	r := RevisionId(e.RevisionID)

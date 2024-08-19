@@ -35,6 +35,9 @@ type ErrNotFound struct {
 // ErrServerError defines model for ErrServerError.
 type ErrServerError = ErrBase
 
+// Labels defines model for Labels.
+type Labels map[string]string
+
 // Meta defines model for Meta.
 type Meta struct {
 	Id       TypeId     `json:"id"`
@@ -45,8 +48,9 @@ type Meta struct {
 
 // Revision defines model for Revision.
 type Revision struct {
-	Meta  Meta  `json:"meta"`
-	Value Value `json:"value"`
+	Labels *Labels `json:"labels,omitempty"`
+	Meta   Meta    `json:"meta"`
+	Value  Value   `json:"value"`
 }
 
 // RevisionId defines model for RevisionId.

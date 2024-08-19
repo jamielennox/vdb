@@ -20,7 +20,7 @@ func (s *sqlFactory) Build(ctx context.Context, name common.CollectionName, valu
 }
 
 func NewSqlDriverFactory(db *gorm.DB) (driver.Factory, error) {
-	if err := db.AutoMigrate(&DbData{}); err != nil {
+	if err := db.AutoMigrate(&DbData{}, &Label{}); err != nil {
 		return nil, fmt.Errorf("failed to migrate dbdata: %w", err)
 	}
 
