@@ -14,10 +14,22 @@ import (
 	strictnethttp "github.com/oapi-codegen/runtime/strictmiddleware/nethttp"
 )
 
+// Defines values for SetAuthorizerJSONBodyValidator.
+const (
+	Opa SetAuthorizerJSONBodyValidator = "opa"
+)
+
 // Defines values for SetValidatorJSONBodyValidator.
 const (
 	Cuelang SetValidatorJSONBodyValidator = "cuelang"
 )
+
+// Authorizer defines model for Authorizer.
+type Authorizer struct {
+	Labels *Labels `json:"labels,omitempty"`
+	Meta   Meta    `json:"meta"`
+	Value  Value   `json:"value"`
+}
 
 // ErrBase defines model for ErrBase.
 type ErrBase struct {
@@ -64,12 +76,22 @@ type TypeName = string
 
 // Validator defines model for Validator.
 type Validator struct {
-	Meta  Meta  `json:"meta"`
-	Value Value `json:"value"`
+	Labels *Labels `json:"labels,omitempty"`
+	Meta   Meta    `json:"meta"`
+	Value  Value   `json:"value"`
 }
 
 // Value defines model for Value.
 type Value = interface{}
+
+// SetAuthorizerJSONBody defines parameters for SetAuthorizer.
+type SetAuthorizerJSONBody struct {
+	Config    *interface{}                    `json:"config,omitempty"`
+	Validator *SetAuthorizerJSONBodyValidator `json:"validator,omitempty"`
+}
+
+// SetAuthorizerJSONBodyValidator defines parameters for SetAuthorizer.
+type SetAuthorizerJSONBodyValidator string
 
 // SetValidatorJSONBody defines parameters for SetValidator.
 type SetValidatorJSONBody struct {
@@ -80,6 +102,9 @@ type SetValidatorJSONBody struct {
 // SetValidatorJSONBodyValidator defines parameters for SetValidator.
 type SetValidatorJSONBodyValidator string
 
+// SetAuthorizerJSONRequestBody defines body for SetAuthorizer for application/json ContentType.
+type SetAuthorizerJSONRequestBody SetAuthorizerJSONBody
+
 // SetDataJSONRequestBody defines body for SetData for application/json ContentType.
 type SetDataJSONRequestBody = Value
 
@@ -88,6 +113,12 @@ type SetValidatorJSONRequestBody SetValidatorJSONBody
 
 // ServerInterface represents all server handlers.
 type ServerInterface interface {
+
+	// (GET /collections/{type}/authorizer)
+	GetAuthorizer(w http.ResponseWriter, r *http.Request, pType TypeName)
+
+	// (POST /collections/{type}/authorizer)
+	SetAuthorizer(w http.ResponseWriter, r *http.Request, pType TypeName)
 
 	// (GET /collections/{type}/data/{id})
 	GetDataById(w http.ResponseWriter, r *http.Request, pType TypeName, id TypeId)
@@ -111,6 +142,16 @@ type ServerInterface interface {
 // Unimplemented server implementation that returns http.StatusNotImplemented for each endpoint.
 
 type Unimplemented struct{}
+
+// (GET /collections/{type}/authorizer)
+func (_ Unimplemented) GetAuthorizer(w http.ResponseWriter, r *http.Request, pType TypeName) {
+	w.WriteHeader(http.StatusNotImplemented)
+}
+
+// (POST /collections/{type}/authorizer)
+func (_ Unimplemented) SetAuthorizer(w http.ResponseWriter, r *http.Request, pType TypeName) {
+	w.WriteHeader(http.StatusNotImplemented)
+}
 
 // (GET /collections/{type}/data/{id})
 func (_ Unimplemented) GetDataById(w http.ResponseWriter, r *http.Request, pType TypeName, id TypeId) {
@@ -150,6 +191,58 @@ type ServerInterfaceWrapper struct {
 }
 
 type MiddlewareFunc func(http.Handler) http.Handler
+
+// GetAuthorizer operation middleware
+func (siw *ServerInterfaceWrapper) GetAuthorizer(w http.ResponseWriter, r *http.Request) {
+	ctx := r.Context()
+
+	var err error
+
+	// ------------- Path parameter "type" -------------
+	var pType TypeName
+
+	err = runtime.BindStyledParameterWithOptions("simple", "type", chi.URLParam(r, "type"), &pType, runtime.BindStyledParameterOptions{ParamLocation: runtime.ParamLocationPath, Explode: false, Required: true})
+	if err != nil {
+		siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "type", Err: err})
+		return
+	}
+
+	handler := http.Handler(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		siw.Handler.GetAuthorizer(w, r, pType)
+	}))
+
+	for _, middleware := range siw.HandlerMiddlewares {
+		handler = middleware(handler)
+	}
+
+	handler.ServeHTTP(w, r.WithContext(ctx))
+}
+
+// SetAuthorizer operation middleware
+func (siw *ServerInterfaceWrapper) SetAuthorizer(w http.ResponseWriter, r *http.Request) {
+	ctx := r.Context()
+
+	var err error
+
+	// ------------- Path parameter "type" -------------
+	var pType TypeName
+
+	err = runtime.BindStyledParameterWithOptions("simple", "type", chi.URLParam(r, "type"), &pType, runtime.BindStyledParameterOptions{ParamLocation: runtime.ParamLocationPath, Explode: false, Required: true})
+	if err != nil {
+		siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "type", Err: err})
+		return
+	}
+
+	handler := http.Handler(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		siw.Handler.SetAuthorizer(w, r, pType)
+	}))
+
+	for _, middleware := range siw.HandlerMiddlewares {
+		handler = middleware(handler)
+	}
+
+	handler.ServeHTTP(w, r.WithContext(ctx))
+}
 
 // GetDataById operation middleware
 func (siw *ServerInterfaceWrapper) GetDataById(w http.ResponseWriter, r *http.Request) {
@@ -466,6 +559,12 @@ func HandlerWithOptions(si ServerInterface, options ChiServerOptions) http.Handl
 	}
 
 	r.Group(func(r chi.Router) {
+		r.Get(options.BaseURL+"/collections/{type}/authorizer", wrapper.GetAuthorizer)
+	})
+	r.Group(func(r chi.Router) {
+		r.Post(options.BaseURL+"/collections/{type}/authorizer", wrapper.SetAuthorizer)
+	})
+	r.Group(func(r chi.Router) {
 		r.Get(options.BaseURL+"/collections/{type}/data/{id}", wrapper.GetDataById)
 	})
 	r.Group(func(r chi.Router) {
@@ -485,6 +584,77 @@ func HandlerWithOptions(si ServerInterface, options ChiServerOptions) http.Handl
 	})
 
 	return r
+}
+
+type GetAuthorizerRequestObject struct {
+	Type TypeName `json:"type"`
+}
+
+type GetAuthorizerResponseObject interface {
+	VisitGetAuthorizerResponse(w http.ResponseWriter) error
+}
+
+type GetAuthorizer200JSONResponse Authorizer
+
+func (response GetAuthorizer200JSONResponse) VisitGetAuthorizerResponse(w http.ResponseWriter) error {
+	w.Header().Set("Content-Type", "application/json")
+	w.WriteHeader(200)
+
+	return json.NewEncoder(w).Encode(response)
+}
+
+type GetAuthorizer404JSONResponse ErrNotFound
+
+func (response GetAuthorizer404JSONResponse) VisitGetAuthorizerResponse(w http.ResponseWriter) error {
+	w.Header().Set("Content-Type", "application/json")
+	w.WriteHeader(404)
+
+	return json.NewEncoder(w).Encode(response)
+}
+
+type GetAuthorizer500JSONResponse ErrServerError
+
+func (response GetAuthorizer500JSONResponse) VisitGetAuthorizerResponse(w http.ResponseWriter) error {
+	w.Header().Set("Content-Type", "application/json")
+	w.WriteHeader(500)
+
+	return json.NewEncoder(w).Encode(response)
+}
+
+type SetAuthorizerRequestObject struct {
+	Type TypeName `json:"type"`
+	Body *SetAuthorizerJSONRequestBody
+}
+
+type SetAuthorizerResponseObject interface {
+	VisitSetAuthorizerResponse(w http.ResponseWriter) error
+}
+
+type SetAuthorizer200JSONResponse Revision
+
+func (response SetAuthorizer200JSONResponse) VisitSetAuthorizerResponse(w http.ResponseWriter) error {
+	w.Header().Set("Content-Type", "application/json")
+	w.WriteHeader(200)
+
+	return json.NewEncoder(w).Encode(response)
+}
+
+type SetAuthorizer404JSONResponse ErrNotFound
+
+func (response SetAuthorizer404JSONResponse) VisitSetAuthorizerResponse(w http.ResponseWriter) error {
+	w.Header().Set("Content-Type", "application/json")
+	w.WriteHeader(404)
+
+	return json.NewEncoder(w).Encode(response)
+}
+
+type SetAuthorizer500JSONResponse ErrServerError
+
+func (response SetAuthorizer500JSONResponse) VisitSetAuthorizerResponse(w http.ResponseWriter) error {
+	w.Header().Set("Content-Type", "application/json")
+	w.WriteHeader(500)
+
+	return json.NewEncoder(w).Encode(response)
 }
 
 type GetDataByIdRequestObject struct {
@@ -707,6 +877,12 @@ func (response SetValidator500JSONResponse) VisitSetValidatorResponse(w http.Res
 // StrictServerInterface represents all server handlers.
 type StrictServerInterface interface {
 
+	// (GET /collections/{type}/authorizer)
+	GetAuthorizer(ctx context.Context, request GetAuthorizerRequestObject) (GetAuthorizerResponseObject, error)
+
+	// (POST /collections/{type}/authorizer)
+	SetAuthorizer(ctx context.Context, request SetAuthorizerRequestObject) (SetAuthorizerResponseObject, error)
+
 	// (GET /collections/{type}/data/{id})
 	GetDataById(ctx context.Context, request GetDataByIdRequestObject) (GetDataByIdResponseObject, error)
 
@@ -753,6 +929,65 @@ type strictHandler struct {
 	ssi         StrictServerInterface
 	middlewares []StrictMiddlewareFunc
 	options     StrictHTTPServerOptions
+}
+
+// GetAuthorizer operation middleware
+func (sh *strictHandler) GetAuthorizer(w http.ResponseWriter, r *http.Request, pType TypeName) {
+	var request GetAuthorizerRequestObject
+
+	request.Type = pType
+
+	handler := func(ctx context.Context, w http.ResponseWriter, r *http.Request, request interface{}) (interface{}, error) {
+		return sh.ssi.GetAuthorizer(ctx, request.(GetAuthorizerRequestObject))
+	}
+	for _, middleware := range sh.middlewares {
+		handler = middleware(handler, "GetAuthorizer")
+	}
+
+	response, err := handler(r.Context(), w, r, request)
+
+	if err != nil {
+		sh.options.ResponseErrorHandlerFunc(w, r, err)
+	} else if validResponse, ok := response.(GetAuthorizerResponseObject); ok {
+		if err := validResponse.VisitGetAuthorizerResponse(w); err != nil {
+			sh.options.ResponseErrorHandlerFunc(w, r, err)
+		}
+	} else if response != nil {
+		sh.options.ResponseErrorHandlerFunc(w, r, fmt.Errorf("unexpected response type: %T", response))
+	}
+}
+
+// SetAuthorizer operation middleware
+func (sh *strictHandler) SetAuthorizer(w http.ResponseWriter, r *http.Request, pType TypeName) {
+	var request SetAuthorizerRequestObject
+
+	request.Type = pType
+
+	var body SetAuthorizerJSONRequestBody
+	if err := json.NewDecoder(r.Body).Decode(&body); err != nil {
+		sh.options.RequestErrorHandlerFunc(w, r, fmt.Errorf("can't decode JSON body: %w", err))
+		return
+	}
+	request.Body = &body
+
+	handler := func(ctx context.Context, w http.ResponseWriter, r *http.Request, request interface{}) (interface{}, error) {
+		return sh.ssi.SetAuthorizer(ctx, request.(SetAuthorizerRequestObject))
+	}
+	for _, middleware := range sh.middlewares {
+		handler = middleware(handler, "SetAuthorizer")
+	}
+
+	response, err := handler(r.Context(), w, r, request)
+
+	if err != nil {
+		sh.options.ResponseErrorHandlerFunc(w, r, err)
+	} else if validResponse, ok := response.(SetAuthorizerResponseObject); ok {
+		if err := validResponse.VisitSetAuthorizerResponse(w); err != nil {
+			sh.options.ResponseErrorHandlerFunc(w, r, err)
+		}
+	} else if response != nil {
+		sh.options.ResponseErrorHandlerFunc(w, r, fmt.Errorf("unexpected response type: %T", response))
+	}
 }
 
 // GetDataById operation middleware

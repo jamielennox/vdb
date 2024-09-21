@@ -2,6 +2,7 @@ package opa
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"github.com/open-policy-agent/opa/ast"
 	"github.com/open-policy-agent/opa/rego"
@@ -11,13 +12,6 @@ import (
 
 type opaAuth struct {
 	query rego.PreparedEvalQuery
-	//regoEval *rego.Rego
-	//buf      *topdown.BufferTracer
-}
-
-type opaCollection struct {
-	Name   common.CollectionName
-	Labels common.Labels
 }
 
 func getOpaInput(targetType string, event common.Event) map[string]any {
@@ -38,11 +32,13 @@ func getOpaInput(targetType string, event common.Event) map[string]any {
 func (o *opaAuth) Collection(ctx context.Context, event common.Event) error {
 	results, err := o.query.Eval(ctx, rego.EvalInput(getOpaInput("collection", event)))
 	if err != nil {
-		switch err := err.(type) {
-		case ast.Errors:
-			errs := make(ErrOpaFailures, len(err))
+		var errw ast.Errors
 
-			for i, e := range err {
+		switch {
+		case errors.As(err, &errw):
+			errs := make(ErrOpaFailures, len(errw))
+
+			for i, e := range errw {
 				errs[i] = ErrOpaFailure{
 					Code:     e.Code,
 					Row:      e.Location.Row,
@@ -51,7 +47,6 @@ func (o *opaAuth) Collection(ctx context.Context, event common.Event) error {
 				}
 			}
 			return errs
-
 		default:
 			return err
 		}

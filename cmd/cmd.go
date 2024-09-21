@@ -8,8 +8,12 @@ import (
 	"log/slog"
 	"net/http"
 	"os"
+	authz "vdb/pkg/authz/base"
 	"vdb/pkg/authz/opa"
+	"vdb/pkg/common"
 	"vdb/pkg/driver/sql"
+	"vdb/pkg/factory"
+	validator "vdb/pkg/validator/base"
 
 	"github.com/go-chi/chi/v5"
 	"github.com/urfave/cli/v3"
@@ -101,43 +105,49 @@ func serve(ctx context.Context, cmd *cli.Command) error {
 		return err
 	}
 
-	sd, err := sql.NewSqlDriverFactory(db)
+	configDriver, err := memory.NewMemoryStore()
 	if err != nil {
 		return err
 	}
 
-	cd, err := memory.NewMemoryStore()
+	dataFactory, err := sql.NewSqlDriverFactory(db)
 	if err != nil {
 		return err
 	}
 
-	//df, err := memory.NewMemoryDriverFactory()
-	//if err != nil {
-	//	return err
-	//}
+	authzStore, err := memory.NewMemoryStore()
+	if err != nil {
+		return err
+	}
+
+	authzFactory := factory.NewFactory[common.AuthorizerName, common.AuthorizerData, authz.Authorizer](authzStore)
+	if err := authzFactory.Register(opa.DefaultOpaAuthorizerName, opa.NewOpaFactory()); err != nil {
+		return err
+	}
+
+	validatorStore, err := memory.NewMemoryStore()
+	if err != nil {
+		return err
+	}
+
+	validatorFactory := factory.NewFactory[common.ValidatorName, common.ValidatorData, validator.Validator](validatorStore)
+	if err := validatorFactory.Register(cuelang.DefaultCueLangValidatorName, cuelang.NewCuelangFactory()); err != nil {
+		return err
+	}
 
 	ds, err := datastore.NewDataStore(
-		cd,
-		sd,
+		configDriver,
+		dataFactory,
+		authzFactory,
+		validatorFactory,
 		datastore.WithLogger(logger),
 	)
 	if err != nil {
 		return err
 	}
 
-	cueFactory := cuelang.NewCuelangFactory()
-	if err := ds.RegisterValidator(cuelang.DefaultCueLangValidatorName, cueFactory); err != nil {
-		return err
-	}
-
-	opaFactory := opa.NewOpaFactory()
-	if err := ds.RegisterAuthorizer(opa.DefaultOpaAuthorizerName, opaFactory); err != nil {
-		return err
-	}
-
 	if _, err := ds.Set(
 		ctx,
-		"test",
 		"test",
 		cuelang.DefaultCueLangValidatorName,
 		sampleCuelang,

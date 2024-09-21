@@ -74,6 +74,77 @@ paths:
             application/json:
               schema:
                 $ref: '#/components/schemas/ErrServerError'
+  /collections/{type}/authorizer:
+    get:
+      operationId: getAuthorizer
+      parameters:
+        - name: type
+          in: path
+          description: Type of data
+          required: true
+          schema:
+            $ref: '#/components/schemas/TypeName'
+      responses:
+        '200':
+          description: data response
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Authorizer'
+        '404':
+          description: not found
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrNotFound'
+        '500':
+          description: internal server error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrServerError'
+    post:
+      operationId: setAuthorizer
+      parameters:
+        - name: type
+          in: path
+          description: Type of data
+          required: true
+          schema:
+            $ref: '#/components/schemas/TypeName'
+      requestBody:
+        description: Validator config
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              additionalProperties: false
+              properties:
+                validator:
+                  type: string
+                  enum:
+                    - "opa"
+                config: {}
+      responses:
+        '200':
+          description: data response
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Revision'
+        '404':
+          description: not found
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrNotFound'
+        '500':
+          description: internal server error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrServerError'
   /collections/{type}/data/{id}:
     get:
       operationId: getDataById
@@ -281,6 +352,19 @@ components:
           $ref: '#/components/schemas/Labels'
         value:
           $ref: '#/components/schemas/Value'
+    Authorizer:
+      type: object
+      additionalProperties: false
+      required:
+        - meta
+        - value
+      properties:
+        meta:
+          $ref: '#/components/schemas/Meta'
+        labels:
+          $ref: '#/components/schemas/Labels'
+        value:
+          $ref: '#/components/schemas/Value'
     Validator:
       type: object
       additionalProperties: false
@@ -290,6 +374,8 @@ components:
       properties:
         meta:
           $ref: '#/components/schemas/Meta'
+        labels:
+          $ref: '#/components/schemas/Labels'
         value:
           $ref: '#/components/schemas/Value'
     ErrBase:

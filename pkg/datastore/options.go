@@ -9,6 +9,7 @@ import (
 type dsOptions struct {
 	auditor       audit.Auditor
 	driverFactory driver.Factory
+	authzFactory  *AuthzFactory
 	logger        *slog.Logger
 }
 
@@ -23,6 +24,12 @@ func WithDriverFactory(f driver.Factory) DataStoreOption {
 func WithAuditor(a audit.Auditor) DataStoreOption {
 	return func(o *dsOptions) {
 		o.auditor = a
+	}
+}
+
+func WithAuthzFactory(f *AuthzFactory) DataStoreOption {
+	return func(o *dsOptions) {
+		o.authzFactory = f
 	}
 }
 

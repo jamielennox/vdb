@@ -2,7 +2,6 @@ package datastore
 
 import (
 	"context"
-	"fmt"
 	"log/slog"
 	audit "vdb/pkg/audit/base"
 	"vdb/pkg/audit/noop"
@@ -10,8 +9,12 @@ import (
 	"vdb/pkg/collection"
 	"vdb/pkg/common"
 	driver "vdb/pkg/driver/base"
+	"vdb/pkg/factory"
 	validator "vdb/pkg/validator/base"
 )
+
+type AuthzFactory = factory.Factory[common.AuthorizerName, common.AuthorizerData, authz.Authorizer]
+type ValidatorFactory = factory.Factory[common.ValidatorName, common.ValidatorData, validator.Validator]
 
 type DataStore struct {
 	auditor audit.Auditor
@@ -20,19 +23,17 @@ type DataStore struct {
 	driver        driver.Driver
 	driverFactory driver.Factory
 
-	authzFactories     map[common.AuthorizerData]authz.Factory
-	validatorFactories map[common.ValidatorName]validator.Factory
+	authzFactory     *AuthzFactory
+	validatorFactory *ValidatorFactory
 }
 
-type collectionConfig struct {
-	AuthzName       common.AuthorizerName `json:"authz_name"`
-	AuthzConfig     common.AuthorizerData `json:"authz_config"`
-	ValidatorName   common.ValidatorName  `json:"validator_name"`
-	ValidatorConfig common.ValidatorData  `json:"validator_config"`
-	DriverConfig    common.DriverData     `json:"driver_config"`
-}
-
-func NewDataStore(driver driver.Driver, factory driver.Factory, opts ...DataStoreOption) (*DataStore, error) {
+func NewDataStore(
+	dri driver.Driver,
+	factory driver.Factory,
+	authzFactory *AuthzFactory,
+	validatorFactory *ValidatorFactory,
+	opts ...DataStoreOption,
+) (*DataStore, error) {
 	o := &dsOptions{
 		auditor: noop.NewNoopAuditor(),
 		logger:  slog.Default(),
@@ -43,95 +44,78 @@ func NewDataStore(driver driver.Driver, factory driver.Factory, opts ...DataStor
 	}
 
 	return &DataStore{
-		auditor:            o.auditor,
-		driver:             driver,
-		driverFactory:      factory,
-		logger:             o.logger,
-		authzFactories:     make(map[common.AuthorizerData]authz.Factory),
-		validatorFactories: make(map[common.ValidatorName]validator.Factory),
+		auditor:          o.auditor,
+		driver:           dri,
+		driverFactory:    factory,
+		logger:           o.logger,
+		authzFactory:     authzFactory,
+		validatorFactory: validatorFactory,
 	}, nil
-}
-
-func (d *DataStore) RegisterAuthorizer(name common.AuthorizerName, factory authz.Factory) error {
-	d.authzFactories[name] = factory
-	return nil
-}
-
-func (d *DataStore) RegisterValidator(name common.ValidatorName, factory validator.Factory) error {
-	d.validatorFactories[name] = factory
-	return nil
 }
 
 func (d *DataStore) Set(
 	ctx context.Context,
 	name common.CollectionName,
-	dri common.DriverData,
+	//dri common.DriverData,
 	validatorName common.ValidatorName,
 	validatorData common.ValidatorData,
 	authzName common.AuthorizerName,
 	authzData common.AuthorizerData,
 	opts ...CollectionOption,
 ) (*collection.Collection, error) {
-	co := getCollectionOptions(opts...)
-
-	config := collectionConfig{
-		ValidatorName:   validatorName,
-		ValidatorConfig: validatorData,
-		AuthzName:       authzName,
-		AuthzConfig:     authzData,
-		DriverConfig:    dri,
-	}
-
-	collection, err := d.getCollection(ctx, name, &config, co)
+	aOutput, err := d.authzFactory.Set(ctx, name, authzName, authzData)
 	if err != nil {
 		return nil, err
 	}
 
-	if _, err := d.driver.Set(ctx, common.CollectionId(name), config); err != nil {
+	vOutput, err := d.validatorFactory.Set(ctx, name, validatorName, validatorData)
+	if err != nil {
 		return nil, err
 	}
 
-	return collection, nil
+	return d.getCollection(ctx, name, vOutput.Object.Object, aOutput.Object.Object, opts)
 }
 
 func (d *DataStore) Get(ctx context.Context, name common.CollectionName, opts ...CollectionOption) (*collection.Collection, error) {
-	co := getCollectionOptions(opts...)
-
-	rev, err := d.driver.GetLatest(ctx, common.CollectionId(name))
-	if err != nil {
-		return nil, err
-	}
-
-	config, ok := rev.Value.(collectionConfig)
-	if !ok {
-		return nil, fmt.Errorf("collection config not found: %s", name)
-	}
-
-	return d.getCollection(ctx, name, &config, co)
+	return d.getCollection(ctx, name, nil, nil, opts)
 }
 
-func (d *DataStore) getCollection(ctx context.Context, name common.CollectionName, config *collectionConfig, opts *collectionOptions) (*collection.Collection, error) {
-	azFactory, ok := d.authzFactories[config.AuthzName]
-	if !ok {
-		return nil, fmt.Errorf("authorizer factory not found: %s", config.AuthzName)
+func (d *DataStore) GetValidator(ctx context.Context, name common.CollectionName) (factory.Output[common.ValidatorName, common.ValidatorData, validator.Validator], error) {
+	return d.validatorFactory.Get(ctx, name)
+}
+
+func (d *DataStore) GetAuthorizer(ctx context.Context, name common.CollectionName) (factory.Output[common.AuthorizerName, common.AuthorizerData, authz.Authorizer], error) {
+	return d.authzFactory.Get(ctx, name)
+}
+
+func (d *DataStore) getCollection(
+	ctx context.Context,
+	name common.CollectionName,
+	validater validator.Validator,
+	authorizer authz.Authorizer,
+	opts []CollectionOption,
+) (*collection.Collection, error) {
+	co := getCollectionOptions(opts...)
+
+	if validater == nil {
+		vObj, err := d.GetValidator(ctx, name)
+		if err != nil {
+			return nil, err
+		}
+
+		validater = vObj.Object.Object
 	}
 
-	validatorFactory, ok := d.validatorFactories[config.ValidatorName]
-	if !ok {
-		return nil, fmt.Errorf("validator factory not found: %s", config.ValidatorName)
+	if authorizer == nil {
+		aObj, err := d.GetAuthorizer(ctx, name)
+		if err != nil {
+			return nil, err
+		}
+
+		authorizer = aObj.Object.Object
 	}
 
-	az, err := azFactory.Build(ctx, config.AuthzConfig)
-	if err != nil {
-		return nil, err
-	}
-
-	v, err := validatorFactory.Build(ctx, config.ValidatorConfig)
-	if err != nil {
-		return nil, err
-	}
-
-	dri, err := d.driverFactory.Build(ctx, name, config.DriverConfig)
+	dri, err := d.driverFactory.Build(ctx, name, "")
 	if err != nil {
 		return nil, err
 	}
@@ -140,8 +124,8 @@ func (d *DataStore) getCollection(ctx context.Context, name common.CollectionNam
 		name,
 		d.auditor,
 		dri,
-		collection.WithValidator(v),
-		collection.WithAuthorizer(az),
+		collection.WithValidator(validater),
+		collection.WithAuthorizer(authorizer),
 		collection.WithLogger(d.logger),
 	)
 	if err != nil {
@@ -152,6 +136,7 @@ func (d *DataStore) getCollection(ctx context.Context, name common.CollectionNam
 		Operation: common.OperationRead,
 		Target: common.CollectionTarget{
 			Name:   c.Name,
+			Type:   "collection",
 			Labels: c.Labels,
 		},
 		Subject: common.UserInfo{
@@ -160,8 +145,8 @@ func (d *DataStore) getCollection(ctx context.Context, name common.CollectionNam
 		},
 	}
 
-	if !opts.bypassAuth {
-		if err := az.Collection(ctx, event); err != nil {
+	if !co.bypassAuth {
+		if err := authorizer.Collection(ctx, event); err != nil {
 			return nil, err
 		}
 	}
