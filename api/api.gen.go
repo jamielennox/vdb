@@ -68,6 +68,9 @@ type Revision struct {
 // RevisionId defines model for RevisionId.
 type RevisionId = uint64
 
+// Transaction defines model for Transaction.
+type Transaction map[string]map[string]Revision
+
 // TypeId defines model for TypeId.
 type TypeId = string
 
@@ -102,6 +105,9 @@ type SetValidatorJSONBody struct {
 // SetValidatorJSONBodyValidator defines parameters for SetValidator.
 type SetValidatorJSONBodyValidator string
 
+// CreateTransactionJSONBody defines parameters for CreateTransaction.
+type CreateTransactionJSONBody map[string]map[string]Value
+
 // SetAuthorizerJSONRequestBody defines body for SetAuthorizer for application/json ContentType.
 type SetAuthorizerJSONRequestBody SetAuthorizerJSONBody
 
@@ -110,6 +116,9 @@ type SetDataJSONRequestBody = Value
 
 // SetValidatorJSONRequestBody defines body for SetValidator for application/json ContentType.
 type SetValidatorJSONRequestBody SetValidatorJSONBody
+
+// CreateTransactionJSONRequestBody defines body for CreateTransaction for application/json ContentType.
+type CreateTransactionJSONRequestBody CreateTransactionJSONBody
 
 // ServerInterface represents all server handlers.
 type ServerInterface interface {
@@ -137,6 +146,9 @@ type ServerInterface interface {
 
 	// (POST /collections/{type}/validator)
 	SetValidator(w http.ResponseWriter, r *http.Request, pType TypeName)
+
+	// (POST /transactions)
+	CreateTransaction(w http.ResponseWriter, r *http.Request)
 }
 
 // Unimplemented server implementation that returns http.StatusNotImplemented for each endpoint.
@@ -180,6 +192,11 @@ func (_ Unimplemented) GetValidatorSummary(w http.ResponseWriter, r *http.Reques
 
 // (POST /collections/{type}/validator)
 func (_ Unimplemented) SetValidator(w http.ResponseWriter, r *http.Request, pType TypeName) {
+	w.WriteHeader(http.StatusNotImplemented)
+}
+
+// (POST /transactions)
+func (_ Unimplemented) CreateTransaction(w http.ResponseWriter, r *http.Request) {
 	w.WriteHeader(http.StatusNotImplemented)
 }
 
@@ -445,6 +462,21 @@ func (siw *ServerInterfaceWrapper) SetValidator(w http.ResponseWriter, r *http.R
 	handler.ServeHTTP(w, r.WithContext(ctx))
 }
 
+// CreateTransaction operation middleware
+func (siw *ServerInterfaceWrapper) CreateTransaction(w http.ResponseWriter, r *http.Request) {
+	ctx := r.Context()
+
+	handler := http.Handler(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		siw.Handler.CreateTransaction(w, r)
+	}))
+
+	for _, middleware := range siw.HandlerMiddlewares {
+		handler = middleware(handler)
+	}
+
+	handler.ServeHTTP(w, r.WithContext(ctx))
+}
+
 type UnescapedCookieParamError struct {
 	ParamName string
 	Err       error
@@ -581,6 +613,9 @@ func HandlerWithOptions(si ServerInterface, options ChiServerOptions) http.Handl
 	})
 	r.Group(func(r chi.Router) {
 		r.Post(options.BaseURL+"/collections/{type}/validator", wrapper.SetValidator)
+	})
+	r.Group(func(r chi.Router) {
+		r.Post(options.BaseURL+"/transactions", wrapper.CreateTransaction)
 	})
 
 	return r
@@ -874,6 +909,23 @@ func (response SetValidator500JSONResponse) VisitSetValidatorResponse(w http.Res
 	return json.NewEncoder(w).Encode(response)
 }
 
+type CreateTransactionRequestObject struct {
+	Body *CreateTransactionJSONRequestBody
+}
+
+type CreateTransactionResponseObject interface {
+	VisitCreateTransactionResponse(w http.ResponseWriter) error
+}
+
+type CreateTransaction200JSONResponse Transaction
+
+func (response CreateTransaction200JSONResponse) VisitCreateTransactionResponse(w http.ResponseWriter) error {
+	w.Header().Set("Content-Type", "application/json")
+	w.WriteHeader(200)
+
+	return json.NewEncoder(w).Encode(response)
+}
+
 // StrictServerInterface represents all server handlers.
 type StrictServerInterface interface {
 
@@ -900,6 +952,9 @@ type StrictServerInterface interface {
 
 	// (POST /collections/{type}/validator)
 	SetValidator(ctx context.Context, request SetValidatorRequestObject) (SetValidatorResponseObject, error)
+
+	// (POST /transactions)
+	CreateTransaction(ctx context.Context, request CreateTransactionRequestObject) (CreateTransactionResponseObject, error)
 }
 
 type StrictHandlerFunc = strictnethttp.StrictHTTPHandlerFunc
@@ -1158,6 +1213,37 @@ func (sh *strictHandler) SetValidator(w http.ResponseWriter, r *http.Request, pT
 		sh.options.ResponseErrorHandlerFunc(w, r, err)
 	} else if validResponse, ok := response.(SetValidatorResponseObject); ok {
 		if err := validResponse.VisitSetValidatorResponse(w); err != nil {
+			sh.options.ResponseErrorHandlerFunc(w, r, err)
+		}
+	} else if response != nil {
+		sh.options.ResponseErrorHandlerFunc(w, r, fmt.Errorf("unexpected response type: %T", response))
+	}
+}
+
+// CreateTransaction operation middleware
+func (sh *strictHandler) CreateTransaction(w http.ResponseWriter, r *http.Request) {
+	var request CreateTransactionRequestObject
+
+	var body CreateTransactionJSONRequestBody
+	if err := json.NewDecoder(r.Body).Decode(&body); err != nil {
+		sh.options.RequestErrorHandlerFunc(w, r, fmt.Errorf("can't decode JSON body: %w", err))
+		return
+	}
+	request.Body = &body
+
+	handler := func(ctx context.Context, w http.ResponseWriter, r *http.Request, request interface{}) (interface{}, error) {
+		return sh.ssi.CreateTransaction(ctx, request.(CreateTransactionRequestObject))
+	}
+	for _, middleware := range sh.middlewares {
+		handler = middleware(handler, "CreateTransaction")
+	}
+
+	response, err := handler(r.Context(), w, r, request)
+
+	if err != nil {
+		sh.options.ResponseErrorHandlerFunc(w, r, err)
+	} else if validResponse, ok := response.(CreateTransactionResponseObject); ok {
+		if err := validResponse.VisitCreateTransactionResponse(w); err != nil {
 			sh.options.ResponseErrorHandlerFunc(w, r, err)
 		}
 	} else if response != nil {

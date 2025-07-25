@@ -2,6 +2,7 @@ package api
 
 import (
 	"context"
+	"fmt"
 	"vdb/pkg/collection"
 
 	"vdb/pkg/common"
@@ -47,7 +48,10 @@ func (s *server) SetData(ctx context.Context, request SetDataRequestObject) (Set
 		}
 	}
 
-	revision, err := c.Set(ctx, common.CollectionId(request.Id), request.Body)
+	transaction, err := c.Set(ctx, nil, collection.CollectionData{
+		Id:    common.CollectionId(request.Id),
+		Value: request.Body,
+	})
 	if err != nil {
 		switch e := err.(type) {
 		case datastore.ErrUnknownType:
@@ -59,7 +63,11 @@ func (s *server) SetData(ctx context.Context, request SetDataRequestObject) (Set
 		}
 	}
 
-	return SetData200JSONResponse(renderRevision(revision)), nil
+	if len(transaction.Revisions) != 1 {
+		return SetData500JSONResponse(RenderServerError(fmt.Errorf("unexpected response count: %d", len(transaction.Revisions)))), nil
+	}
+
+	return SetData200JSONResponse(renderRevision(transaction.Revisions[0])), nil
 }
 
 func (s *server) GetDataRevisionById(ctx context.Context, request GetDataRevisionByIdRequestObject) (GetDataRevisionByIdResponseObject, error) {

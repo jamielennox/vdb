@@ -2,6 +2,7 @@ package api
 
 import (
 	"context"
+	"errors"
 	"vdb/pkg/common"
 	"vdb/pkg/datastore"
 )
@@ -9,8 +10,9 @@ import (
 func (s *server) GetValidatorSummary(ctx context.Context, request GetValidatorSummaryRequestObject) (GetValidatorSummaryResponseObject, error) {
 	c, err := s.ds.GetValidator(ctx, common.CollectionName(request.Type))
 	if err != nil {
-		switch e := err.(type) {
-		case datastore.ErrUnknownType:
+		var e datastore.ErrUnknownType
+		switch {
+		case errors.As(err, &e):
 			return GetValidatorSummary404JSONResponse(RenderErrUnknownType(e)), nil
 		default:
 			return GetValidatorSummary500JSONResponse(RenderServerError(e)), nil

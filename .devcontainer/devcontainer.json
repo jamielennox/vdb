@@ -1,0 +1,7 @@
+{
+  "name": "vdb",
+  "image": "mcr.microsoft.com/devcontainers/go",
+  "forwardPorts": [
+    8080
+  ]
+}

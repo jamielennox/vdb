@@ -15,3 +15,8 @@ type Revision struct {
 	Labels common.Labels
 	Value  common.CollectionValue
 }
+
+type Transaction struct {
+	Id        common.TransactionId
+	Revisions []Revision
+}

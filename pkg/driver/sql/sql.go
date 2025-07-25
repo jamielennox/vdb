@@ -33,7 +33,10 @@ type DbData struct {
 	Id             string  `gorm:"primaryKey"`
 	Labels         []Label `gorm:"foreignKey:CollectionName,Id,Revision"`
 	Revision       uint    `gorm:"primaryKey;autoIncrement:true"`
-	Value          any     `gorm:"serializer:json"`
+
+	TransactionId *string
+
+	Value any `gorm:"serializer:json"`
 }
 
 func (s *sqlDriver) GetLatest(ctx context.Context, id common.CollectionId) (driver.Revision, error) {
@@ -83,27 +86,46 @@ func (s *sqlDriver) GetRevisions(ctx context.Context, id common.CollectionId) ([
 	return ret, nil
 }
 
-func (s *sqlDriver) Set(ctx context.Context, id common.CollectionId, value common.CollectionValue) (driver.Revision, error) {
-	d := DbData{
-		CollectionName: string(s.collectionName),
-		Id:             string(id),
-		Value:          value,
+func (s *sqlDriver) Set(ctx context.Context, transId common.TransactionId, data ...driver.CollectionData) (driver.Transaction, error) {
+	var dbd = make([]DbData, len(data))
+
+	// FIXME: There's a bug here that the revisionid is always the max value.
+
+	for i, d := range data {
+		dbd[i].CollectionName = string(s.collectionName)
+		dbd[i].Id = string(d.Id)
+		dbd[i].Value = d.Value
+		dbd[i].TransactionId = transId
 	}
 
-	result := s.db.WithContext(ctx).Create(&d)
+	result := s.db.WithContext(ctx).Create(&dbd)
 
 	if result.Error != nil {
-		return driver.Revision{}, fmt.Errorf("Failed to write record to db: %w", result.Error)
+		return driver.Transaction{}, fmt.Errorf("failed to write record to db: %w", result.Error)
 	}
 
-	fmt.Println("created primary key: ", d.Id, d.Revision)
+	trans := driver.Transaction{
+		Id:        transId,
+		Revisions: make([]driver.Revision, len(data)),
+	}
 
-	return driver.Revision{
-		Meta: driver.Meta{
-			Id:       id,
+	for i, d := range dbd {
+		if dbd[i].Labels != nil {
+			trans.Revisions[i].Labels = make(common.Labels, len(dbd[i].Labels))
+
+			for _, l := range dbd[i].Labels {
+				trans.Revisions[i].Labels[l.Key] = l.Value
+			}
+		}
+
+		trans.Revisions[i].Meta = driver.Meta{
+			Id:       common.CollectionId(d.Id),
 			Revision: common.RevisionID(d.Revision),
 			Version:  1,
-		},
-		Value: value,
-	}, nil
+		}
+
+		trans.Revisions[i].Value = dbd[i].Value
+	}
+
+	return trans, nil
 }

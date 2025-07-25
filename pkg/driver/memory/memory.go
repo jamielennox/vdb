@@ -8,9 +8,15 @@ import (
 	"vdb/pkg/driver/base"
 )
 
+type memoryData struct {
+	data    []common.CollectionValue
+	transId common.TransactionId
+}
+
 type memoryStore struct {
 	lock  sync.RWMutex
-	store map[common.CollectionId][]common.CollectionValue
+	store map[common.CollectionId]*memoryData
+	//store map[common.CollectionId][]common.CollectionValue
 }
 
 func valuesToRevisions(id common.CollectionId, values []common.CollectionValue) []base.Revision {
@@ -39,17 +45,17 @@ func (m *memoryStore) GetLatest(ctx context.Context, id common.CollectionId) (ba
 		return base.Revision{}, fmt.Errorf("id not found")
 	}
 
-	if len(v) == 0 {
+	if len(v.data) == 0 {
 		return base.Revision{}, fmt.Errorf("no revisions")
 	}
 
 	return base.Revision{
 		Meta: base.Meta{
 			Id:       id,
-			Revision: common.RevisionID(len(v) - 1),
+			Revision: common.RevisionID(len(v.data) - 1),
 			Version:  base.DefaultVersion,
 		},
-		Value: v[len(v)-1],
+		Value: v.data[len(v.data)-1],
 	}, nil
 }
 
@@ -62,27 +68,42 @@ func (m *memoryStore) GetRevisions(ctx context.Context, id common.CollectionId) 
 		return nil, fmt.Errorf("id not found")
 	}
 
-	return valuesToRevisions(id, v), nil
+	return valuesToRevisions(id, v.data), nil
 }
 
-func (m *memoryStore) Set(ctx context.Context, id common.CollectionId, value common.CollectionValue) (base.Revision, error) {
+func (m *memoryStore) Set(ctx context.Context, transId common.TransactionId, data ...base.CollectionData) (base.Transaction, error) {
+	//func (m *memoryStore) Set(ctx context.Context, id common.CollectionId, value common.CollectionValue) (base.Revision, error) {
 	m.lock.Lock()
 	defer m.lock.Unlock()
 
 	if m.store == nil {
-		m.store = make(map[common.CollectionId][]common.CollectionValue)
+		m.store = make(map[common.CollectionId]*memoryData)
 	}
 
-	m.store[id] = append(m.store[id], value)
+	trans := base.Transaction{
+		Id: transId,
+	}
 
-	return base.Revision{
-		Meta: base.Meta{
-			Id:       id,
-			Revision: common.RevisionID(len(m.store[id]) - 1),
-			Version:  base.DefaultVersion,
-		},
-		Value: value,
-	}, nil
+	for _, d := range data {
+		if m.store[d.Id] == nil {
+			m.store[d.Id] = &memoryData{}
+		}
+
+		m.store[d.Id].transId = transId
+		m.store[d.Id].data = append(m.store[d.Id].data, d.Value)
+
+		trans.Revisions = append(trans.Revisions, base.Revision{
+			Meta: base.Meta{
+				Id:       d.Id,
+				Revision: common.RevisionID(len(m.store[d.Id].data) - 1),
+				Version:  base.DefaultVersion,
+			},
+			Labels: nil,
+			Value:  d.Value,
+		})
+	}
+
+	return trans, nil
 }
 
 func NewMemoryStore(opts ...Option) (base.Driver, error) {
@@ -92,6 +113,6 @@ func NewMemoryStore(opts ...Option) (base.Driver, error) {
 	}
 
 	return &memoryStore{
-		store: make(map[common.CollectionId][]common.CollectionValue),
+		store: make(map[common.CollectionId]*memoryData),
 	}, nil
 }

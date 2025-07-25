@@ -4,6 +4,8 @@ import (
 	"context"
 	"fmt"
 	slogGorm "github.com/orandin/slog-gorm"
+	"gorm.io/driver/sqlite"
+	"gorm.io/gorm"
 	"log"
 	"log/slog"
 	"net/http"
@@ -17,8 +19,6 @@ import (
 
 	"github.com/go-chi/chi/v5"
 	"github.com/urfave/cli/v3"
-	"gorm.io/driver/sqlite"
-	"gorm.io/gorm"
 	"vdb/api"
 	"vdb/pkg/datastore"
 	"vdb/pkg/driver/memory"
@@ -111,6 +111,7 @@ func serve(ctx context.Context, cmd *cli.Command) error {
 	}
 
 	dataFactory, err := sql.NewSqlDriverFactory(db)
+	//dataFactory, err := memory.NewMemoryDriverFactory()
 	if err != nil {
 		return err
 	}

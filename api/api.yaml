@@ -299,6 +299,28 @@ paths:
             application/json:
               schema:
                 $ref: '#/components/schemas/ErrServerError'
+  /transactions:
+    post:
+      operationId: createTransaction
+      requestBody:
+        description: 'Multiple objects to set'
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              additionalProperties:
+                type: object
+                additionalProperties:
+                  $ref: '#/components/schemas/Value'
+      responses:
+        '200':
+          description: Transaction Data
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Transaction'
+
 components:
   schemas:
     Meta:
@@ -402,3 +424,9 @@ components:
     ErrServerError:
       allOf:
         - $ref: '#/components/schemas/ErrBase'
+    Transaction:
+      type: object
+      additionalProperties:
+        type: object
+        additionalProperties:
+          $ref: '#/components/schemas/Revision'

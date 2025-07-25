@@ -2,6 +2,7 @@ package api
 
 import (
 	"context"
+	"errors"
 	"vdb/pkg/common"
 	"vdb/pkg/datastore"
 )
@@ -9,8 +10,9 @@ import (
 func (s *server) GetAuthorizer(ctx context.Context, request GetAuthorizerRequestObject) (GetAuthorizerResponseObject, error) {
 	c, err := s.ds.GetAuthorizer(ctx, common.CollectionName(request.Type))
 	if err != nil {
-		switch e := err.(type) {
-		case datastore.ErrUnknownType:
+		var e datastore.ErrUnknownType
+		switch {
+		case errors.As(err, &e):
 			return GetAuthorizer404JSONResponse(RenderErrUnknownType(e)), nil
 		default:
 			return GetAuthorizer500JSONResponse(RenderServerError(e)), nil

@@ -57,14 +57,21 @@ func (f *Factory[K, V, O]) Set(ctx context.Context, collection common.Collection
 		return Output[K, V, O]{}, err
 	}
 
-	rev, err := f.driver.Set(ctx, common.CollectionId(collection), o.config)
+	t, err := f.driver.Set(ctx, nil, driver.CollectionData{
+		Id:    common.CollectionId(collection),
+		Value: o.config,
+	})
 	if err != nil {
 		return Output[K, V, O]{}, fmt.Errorf("failed to set collection %s: %w", collection, err)
 	}
 
+	if len(t.Revisions) != 1 {
+		return Output[K, V, O]{}, fmt.Errorf("unexpected collection response %s: found(%d), expected(1)", collection, len(t.Revisions))
+	}
+
 	return Output[K, V, O]{
 		Object:     o,
-		Meta:       rev.Meta,
+		Meta:       t.Revisions[0].Meta,
 		driver:     f.driver,
 		collection: collection,
 	}, nil

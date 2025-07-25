@@ -4,6 +4,8 @@ type CollectionName string
 type CollectionId string
 type CollectionValue any
 
+type TransactionId *string
+
 type Labels map[string]string
 
 type RevisionID uint64

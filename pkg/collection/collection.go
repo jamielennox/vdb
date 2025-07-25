@@ -22,6 +22,11 @@ type Collection struct {
 	authz  authz.Authorizer
 }
 
+type CollectionData struct {
+	Id    common.CollectionId
+	Value common.CollectionValue
+}
+
 func NewCollection(name common.CollectionName, aud audit.Auditor, dri driver.Driver, opts ...Option) (*Collection, error) {
 	o := getCollectionOptions(opts...)
 
@@ -85,7 +90,7 @@ func (c *Collection) GetRevisions(ctx context.Context, id common.CollectionId) (
 		return nil, ErrIdNotFound{Type: c.Name, Id: id}
 	}
 
-	ret := make([]Revision, len(revs))
+	ret := make([]Revision, 0, len(revs))
 
 	for i, x := range revs {
 		if err = c.vali.Validate(ctx, x.Value); err != nil {
@@ -140,35 +145,61 @@ func (c *Collection) GetRevision(ctx context.Context, id common.CollectionId, re
 	return newRev, nil
 }
 
-func (c *Collection) Set(ctx context.Context, id common.CollectionId, value common.CollectionValue) (Revision, error) {
-	if err := c.vali.Validate(ctx, value); err != nil {
-		return Revision{}, err
+func (c *Collection) Set(ctx context.Context, transId common.TransactionId, data ...CollectionData) (Transaction, error) {
+
+	driverData := make([]driver.CollectionData, 0, len(data))
+	for _, d := range data {
+		if err := c.vali.Validate(ctx, d.Value); err != nil {
+			return Transaction{}, err
+		}
+
+		driverData = append(driverData, driver.CollectionData{
+			Id:    d.Id,
+			Value: d.Value,
+		})
 	}
 
-	rev, err := c.dri.Set(ctx, id, value)
+	t, err := c.dri.Set(ctx, nil, driverData...)
 	if err != nil {
-		return Revision{}, err
+		return Transaction{Id: transId}, err
 	}
 
-	newRev, err := convertRevision(c.Name, &rev)
-
-	event := common.Event{
-		Operation: common.OperationUpdate,
-		Target: common.CollectionTarget{
-			Name:     c.Name,
-			Id:       id,
-			Revision: rev.Meta.Revision,
-			Labels:   c.Labels,
-			Type:     "collection",
-		},
-		Subject: common.UserInfo{
-			UserName: "jamie",
-			Roles:    []string{"admin"},
-		},
+	if len(t.Revisions) != 1 {
+		return Transaction{Id: transId}, fmt.Errorf("unexpected revision response count, expected (1), found (%d)", len(t.Revisions))
 	}
 
-	c.aud.Event(event)
-	return newRev, nil
+	trans := Transaction{
+		Id:        t.Id,
+		Revisions: make([]Revision, 0, len(t.Revisions)),
+	}
+	events := []common.Event{}
+
+	for _, r := range t.Revisions {
+		newRev, err := convertRevision(c.Name, &r)
+
+		if err != nil {
+			return trans, nil
+		}
+
+		trans.Revisions = append(trans.Revisions, newRev)
+		events = append(events, common.Event{
+			Operation: common.OperationUpdate,
+			Target: common.CollectionTarget{
+				Name:     c.Name,
+				Id:       r.Meta.Id,
+				Revision: r.Meta.Revision,
+				Labels:   c.Labels,
+				Type:     "collection",
+			},
+			Subject: common.UserInfo{
+				UserName: "jamie",
+				Roles:    []string{"admin"},
+			},
+		})
+	}
+
+	c.aud.Event(events...)
+	return trans, nil
 }
 
 func convertRevision(typ common.CollectionName, revision *driver.Revision) (Revision, error) {
