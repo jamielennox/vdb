@@ -3,9 +3,31 @@
 package http
 
 import (
+	"context"
 	"net/http"
+
+	strictnethttp "github.com/oapi-codegen/runtime/strictmiddleware/nethttp"
+	"go.opentelemetry.io/otel"
+	"go.opentelemetry.io/otel/trace"
+
 	"vdb/pkg/datastore"
 )
+
+var tracer = otel.Tracer("vdb.api.http")
+
+func otelMiddleware(next strictnethttp.StrictHTTPHandlerFunc, operationID string) strictnethttp.StrictHTTPHandlerFunc {
+	return func(ctx context.Context, w http.ResponseWriter, r *http.Request, request interface{}) (response interface{}, err error) {
+		var span trace.Span
+		ctx, span = tracer.Start(
+			ctx,
+			operationID,
+			trace.WithSpanKind(trace.SpanKindServer),
+		)
+		defer span.End()
+
+		return next(ctx, w, r, request)
+	}
+}
 
 func NewHandler(ds *datastore.DataStore, opts ...Option) (http.Handler, error) {
 	s := &server{
@@ -20,7 +42,9 @@ func NewHandler(ds *datastore.DataStore, opts ...Option) (http.Handler, error) {
 
 	si := NewStrictHandlerWithOptions(
 		s,
-		[]StrictMiddlewareFunc{},
+		[]StrictMiddlewareFunc{
+			otelMiddleware,
+		},
 		StrictHTTPServerOptions{},
 	)
 

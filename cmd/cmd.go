@@ -2,28 +2,24 @@ package main
 
 import (
 	"context"
+	"errors"
 	"fmt"
-	slogGorm "github.com/orandin/slog-gorm"
-	"gorm.io/driver/sqlite"
-	"gorm.io/gorm"
+	"go.opentelemetry.io/contrib/instrumentation/net/http/otelhttp"
 	"log"
 	"log/slog"
+	"net"
 	"net/http"
 	"os"
-	http2 "vdb/api/http"
-	authz "vdb/pkg/authz/base"
-	"vdb/pkg/authz/opa"
-	"vdb/pkg/common"
-	"vdb/pkg/driver/sql"
-	"vdb/pkg/factory"
-	validator "vdb/pkg/validator/base"
+	"os/signal"
+	"syscall"
+	"time"
+	"vdb/pkg/datastore"
+	"vdb/pkg/health"
 
 	"github.com/go-chi/chi/v5"
 	"github.com/urfave/cli/v3"
-	"vdb/pkg/datastore"
-	"vdb/pkg/driver/memory"
-	"vdb/pkg/health"
-	"vdb/pkg/validator/cuelang"
+	_ "go.opentelemetry.io/otel"
+	httpapi "vdb/api/http"
 )
 
 const sampleCuelang = `
@@ -88,94 +84,51 @@ func main() {
 	}
 }
 
-func serve(ctx context.Context, cmd *cli.Command) error {
+func mux(ds *datastore.DataStore) (http.Handler, error) {
 	r := chi.NewRouter()
-	logger := slog.Default()
-
-	db, err := gorm.Open(
-		sqlite.Open("test.db"),
-		&gorm.Config{
-			Logger: slogGorm.New(
-				slogGorm.WithHandler(logger.Handler()),
-			),
-		},
-	)
-	if err != nil {
-		logger.ErrorContext(ctx, "failed to connect to database", slog.Any("err", err))
-		return err
-	}
-
-	configDriver, err := memory.NewMemoryStore()
-	if err != nil {
-		return err
-	}
-
-	dataFactory, err := sql.NewSqlDriverFactory(db)
-	//dataFactory, err := memory.NewMemoryDriverFactory()
-	if err != nil {
-		return err
-	}
-
-	authzStore, err := memory.NewMemoryStore()
-	if err != nil {
-		return err
-	}
-
-	authzFactory := factory.NewFactory[common.AuthorizerName, common.AuthorizerData, authz.Authorizer](authzStore)
-	if err := authzFactory.Register(opa.DefaultOpaAuthorizerName, opa.NewOpaFactory()); err != nil {
-		return err
-	}
-
-	validatorStore, err := memory.NewMemoryStore()
-	if err != nil {
-		return err
-	}
-
-	validatorFactory := factory.NewFactory[common.ValidatorName, common.ValidatorData, validator.Validator](validatorStore)
-	if err := validatorFactory.Register(cuelang.DefaultCueLangValidatorName, cuelang.NewCuelangFactory()); err != nil {
-		return err
-	}
-
-	ds, err := datastore.NewDataStore(
-		configDriver,
-		dataFactory,
-		authzFactory,
-		validatorFactory,
-		datastore.WithLogger(logger),
-	)
-	if err != nil {
-		return err
-	}
-
-	if _, err := ds.Set(
-		ctx,
-		"test",
-		cuelang.DefaultCueLangValidatorName,
-		sampleCuelang,
-		opa.DefaultOpaAuthorizerName,
-		sampleOpa,
-		datastore.WithAuthBypass(true),
-	); err != nil {
-		return err
-	}
-
-	handler, err := http2.NewHandler(ds)
-	if err != nil {
-		return err
-	}
-
-	r.Mount("/api", handler)
+	r.Use(otelhttp.NewMiddleware("server"))
 
 	h, err := health.NewHealth()
 	if err != nil {
-		return err
+		return nil, err
 	}
 	r.Mount("/health", h)
+
+	handler, err := httpapi.NewHandler(ds)
+	if err != nil {
+		return nil, err
+	}
+	r.Mount("/api", handler)
 
 	//chi.Walk(r, func(method string, route string, handler http.Handler, middlewares ...func(http.Handler) http.Handler) error {
 	//	fmt.Printf("[%s]: '%s' has %d middlewares\n", method, route, len(middlewares))
 	//	return nil
 	//})
+
+	return r, nil
+}
+
+func serve(ctx context.Context, cmd *cli.Command) (err error) {
+	otelShutdown, err := setupOTelSDK(ctx)
+	if err != nil {
+		return err
+	}
+
+	defer func() {
+		err = errors.Join(err, otelShutdown(ctx))
+	}()
+
+	logger := newLogger("vdb")
+
+	ds, err := newDataStore(ctx, logger, cmd)
+	if err != nil {
+		return
+	}
+
+	r, err := mux(ds)
+	if err != nil {
+		return
+	}
 
 	listenAddr := fmt.Sprintf(
 		"%s:%d",
@@ -183,11 +136,34 @@ func serve(ctx context.Context, cmd *cli.Command) error {
 		cmd.Int("port"),
 	)
 
-	s := &http.Server{
+	server := &http.Server{
 		Handler: r,
 		Addr:    listenAddr,
+		BaseContext: func(_ net.Listener) context.Context {
+			return ctx
+		},
 	}
 
-	slog.Info("starting server", slog.String("addr", listenAddr))
-	return s.ListenAndServe()
+	go func() {
+		logger.InfoContext(ctx, "starting server", slog.String("addr", listenAddr))
+		if err := server.ListenAndServe(); !errors.Is(err, http.ErrServerClosed) {
+			return
+		}
+		err = nil
+		logger.InfoContext(ctx, "Stopped serving new connections.")
+	}()
+
+	sigChan := make(chan os.Signal, 1)
+	signal.Notify(sigChan, syscall.SIGINT, syscall.SIGTERM)
+	<-sigChan
+
+	shutdownCtx, shutdownRelease := context.WithTimeout(ctx, 10*time.Second)
+	defer shutdownRelease()
+
+	if err = server.Shutdown(shutdownCtx); err != nil {
+		return
+	}
+
+	logger.DebugContext(ctx, "Graceful shutdown complete.")
+	return nil
 }
