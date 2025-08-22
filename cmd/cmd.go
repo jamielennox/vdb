@@ -10,6 +10,7 @@ import (
 	"log/slog"
 	"net/http"
 	"os"
+	http2 "vdb/api/http"
 	authz "vdb/pkg/authz/base"
 	"vdb/pkg/authz/opa"
 	"vdb/pkg/common"
@@ -19,7 +20,6 @@ import (
 
 	"github.com/go-chi/chi/v5"
 	"github.com/urfave/cli/v3"
-	"vdb/api"
 	"vdb/pkg/datastore"
 	"vdb/pkg/driver/memory"
 	"vdb/pkg/health"
@@ -72,7 +72,7 @@ func main() {
 			&cli.IntFlag{
 				Name:  "port",
 				Value: 8080,
-				Validator: func(i int64) error {
+				Validator: func(i int) error {
 					if i < 0 || i > 65535 {
 						return cli.Exit("port must be between 0 and 65535", 1)
 					}
@@ -159,7 +159,7 @@ func serve(ctx context.Context, cmd *cli.Command) error {
 		return err
 	}
 
-	handler, err := api.NewHandler(ds)
+	handler, err := http2.NewHandler(ds)
 	if err != nil {
 		return err
 	}

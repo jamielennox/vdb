@@ -1,4 +1,4 @@
-package api
+package http
 
 import (
 	"vdb/pkg/collection"
